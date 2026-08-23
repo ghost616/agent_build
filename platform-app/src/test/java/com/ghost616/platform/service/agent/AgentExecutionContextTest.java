@@ -346,7 +346,8 @@ class AgentExecutionContextTest {
             AtomicReference<String> capturedContent = new AtomicReference<>();
             setCallback(new AgentExecutionContext.AgentContextMutator.SendUserMessageCallback() {
                 @Override
-                public void send(String childSessionId, String content, String modelId, Boolean thinking) {
+                public void send(String childSessionId, String content, String modelId, Boolean thinking,
+                                 java.util.List<com.ghost616.agentbase.dto.model.ImageContent> images) {
                     capturedSessionId.set(childSessionId);
                     capturedContent.set(content);
                 }
@@ -367,7 +368,8 @@ class AgentExecutionContextTest {
             AtomicReference<String> capturedSessionId = new AtomicReference<>();
             setCallback(new AgentExecutionContext.AgentContextMutator.SendUserMessageCallback() {
                 @Override
-                public void send(String childSessionId, String content, String modelId, Boolean thinking) {
+                public void send(String childSessionId, String content, String modelId, Boolean thinking,
+                                 java.util.List<com.ghost616.agentbase.dto.model.ImageContent> images) {
                     capturedSessionId.set(childSessionId);
                 }
             });
@@ -389,7 +391,8 @@ class AgentExecutionContextTest {
             AtomicReference<Boolean> capturedThinking = new AtomicReference<>();
             setCallback(new AgentExecutionContext.AgentContextMutator.SendUserMessageCallback() {
                 @Override
-                public void send(String childSessionId, String content, String modelId, Boolean thinking) {
+                public void send(String childSessionId, String content, String modelId, Boolean thinking,
+                                 java.util.List<com.ghost616.agentbase.dto.model.ImageContent> images) {
                     capturedSessionId.set(childSessionId);
                     capturedContent.set(content);
                     capturedModelId.set(modelId);

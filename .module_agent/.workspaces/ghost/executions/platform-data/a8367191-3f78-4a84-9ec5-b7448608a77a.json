@@ -1,0 +1,16 @@
+[
+  {
+    "plan_id": "plan_308ca9b0-b68c-4658-a240-54da41cb2458",
+    "plan": "支持大模型图像理解——图片映射表持久化层",
+    "modified_files": [
+      "platform-data/src/main/java/com/ghost616/platform/entity/MessageImage.java",
+      "platform-data/src/main/java/com/ghost616/platform/repository/MessageImageMapper.java",
+      "platform-data/src/main/resources/schema-message.sql",
+      "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java",
+      "platform-data/src/test/java/com/ghost616/platform/MessageImageSchemaTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/migration/SchemaMigrationTest.java"
+    ],
+    "summary": "执行总结：本轮完成「支持大模型图像理解——图片映射表持久化层」，共修改 6 个文件：1) 新建 entity/MessageImage.java（@TableName(\"message_image\")，字段 id/messageId/imgId/imgText，id 含 @JsonSerialize ToStringSerializer 序列化注解，风格对齐 MessageToolCall）；2) 新建 repository/MessageImageMapper.java（继承 MyBatis-Plus BaseMapper，@Mapper @DS(\"message\") 路由消息数据源）；3) schema-message.sql 新增 message_image 建表语句（id BIGINT PK/message_id BIGINT/img_id VARCHAR(255)/img_text MEDIUMTEXT）及 idx_message_image_message_id 索引；4) MessageSchemaMigration 新增 message_image.message_id/img_id/img_text 三条 ALTER 增量迁移（消息数据源迁移总数 11→14，经 createMessageTables 先建表保证幂等）；5) 新增 MessageImageSchemaTest 6 个用例；6) platform-app SchemaMigrationTest MESSAGE_ALTER_COUNT 常量 11→14 同步。首轮测试发现新增文件带 UTF-8 BOM 阻断编译，已全部去除并复测通过。模块元数据（definition 新增 3 文件/更新 2 文件描述、spec 三个章节追加、history 记录）已同步。\n测试总结：复测全部通过：platform-data mvn compile BUILD SUCCESS（55 源文件）；platform-data mvn test 67 项全部通过（0 失败/0 错误/0 跳过，含 MessageImageSchemaTest 6 用例、MessageToolCallSchemaTest 7 用例、AgentLogMigrationTest 4 用例等 18 个测试类）；先 mvn install 更新本地仓库后 platform-app SchemaMigrationTest 15/15 通过（MESSAGE_ALTER_COUNT=14 与实际迁移条数一致）；根目录全工程编译 5 个 reactor 模块全部 SUCCESS 无破坏。环境说明：测试中 agent-base 旧 jar 缺 ImageContent、platform-app target 残留过期测试类两个环境问题由离朱现场 clean/install 解决，非本变更代码缺陷。",
+    "errors": []
+  }
+]

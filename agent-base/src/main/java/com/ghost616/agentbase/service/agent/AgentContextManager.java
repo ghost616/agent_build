@@ -2,6 +2,7 @@ package com.ghost616.agentbase.service.agent;
 
 import com.ghost616.agentbase.core.AgentComponentRegistry;
 import com.ghost616.agentbase.dto.model.CustomToolCall;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.UsageInfo;
 import com.ghost616.agentbase.dto.model.WebSearchCall;
@@ -300,8 +301,9 @@ public class AgentContextManager {
                                                 toolIds, skillIds, prompt) ->
                 createChildSession(psId, sessionName, description, modelId,
                         toolIds, skillIds, prompt, mutator.getConversationId());
-        mutator.sendUserMessageCallback = (childSessionId, content, modelId, thinking) ->
-                sendUserMessage(sessionId, childSessionId, content, modelId, thinking, mutator.getConversationId());
+        mutator.sendUserMessageCallback = (childSessionId, content, modelId, thinking, images) ->
+                sendUserMessage(sessionId, childSessionId, content, modelId, thinking,
+                        mutator.getConversationId(), images);
         mutator.sendParentMessageCallback = (parentId, content, conversationId) ->
                 sendParentMessage(sessionId, parentId, content, conversationId);
     }
@@ -324,15 +326,17 @@ public class AgentContextManager {
         return childSessionId;
     }
 
-    private void sendUserMessage(String parentSessionId, String childSessionId, String content, String modelId, Boolean thinking, String conversationId) {
+    private void sendUserMessage(String parentSessionId, String childSessionId, String content, String modelId,
+                                 Boolean thinking, String conversationId, List<ImageContent> images) {
         sessionManager.messageSave().sessionId(childSessionId).role("user").content(content)
+                .images(images)
                 .conversationId(conversationId).save();
 
         addHistoryEntry(childSessionId, new AgentExecutionContext.HistoryEntry(
                 "user", content, null, null,
                 LocalDateTime.now(),
                 Collections.emptyList(),
-                null, null, null));
+                null, null, null, images));
 
         addLog(SendMessageLogData.builder()
                 .logLevel(LogLevel.INFO)
@@ -364,7 +368,7 @@ public class AgentContextManager {
                 "user", content, null, null,
                 LocalDateTime.now(),
                 Collections.emptyList(),
-                null, null, null));
+                null, null, null, null));
 
         addLog(SendParentMessageLogData.builder()
                 .logLevel(LogLevel.INFO)
@@ -463,7 +467,8 @@ public class AgentContextManager {
             history.add(new AgentExecutionContext.HistoryEntry(
                     msg.role(), msg.content(), msg.reasoning(), msg.toolInfo(),
                     msg.createTime(), Collections.unmodifiableList(toolCalls),
-                    msg.usage(), toWebSearchCall(msg.webSearchCall()), toCustomToolCall(msg.customToolCall())));
+                    msg.usage(), toWebSearchCall(msg.webSearchCall()), toCustomToolCall(msg.customToolCall()),
+                    msg.images()));
         }
         return history;
     }

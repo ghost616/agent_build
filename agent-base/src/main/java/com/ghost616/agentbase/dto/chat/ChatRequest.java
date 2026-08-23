@@ -1,5 +1,8 @@
 package com.ghost616.agentbase.dto.chat;
 
+import java.util.List;
+
+import com.ghost616.agentbase.dto.model.ImageContent;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -27,4 +30,7 @@ public class ChatRequest {
 
     /** 对话 ID（非必填，父会话发起聊天时用于标记对话归属） */
     private String conversationId;
+
+    /** 请求级图片列表（图片对象数组；imgId 仅供前端关联，不传给模型。控制器暂不暴露） */
+    private List<ImageContent> images;
 }

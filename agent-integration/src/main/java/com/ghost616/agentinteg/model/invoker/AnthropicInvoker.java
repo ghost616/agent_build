@@ -22,6 +22,7 @@ import reactor.core.publisher.Mono;
 import com.ghost616.agentbase.dto.model.ChatChunk;
 import com.ghost616.agentbase.dto.model.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatResponse;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolCallDelta;
@@ -256,6 +257,14 @@ public class AnthropicInvoker implements ModelInvoker {
                 textBlock.put("type", "text");
                 textBlock.put("text", msg.getContent() != null ? msg.getContent() : "");
                 content.add(textBlock);
+                if (msg.getImages() != null) {
+                    for (ImageContent img : msg.getImages()) {
+                        if (img.getImgText() == null || img.getImgText().isEmpty()) {
+                            continue;
+                        }
+                        content.add(buildAnthropicImageBlock(img.getImgText()));
+                    }
+                }
                 userMsg.put("content", content);
                 anthropicMessages.add(userMsg);
             } else if ("assistant".equals(msg.getRole())) {
@@ -306,6 +315,35 @@ public class AnthropicInvoker implements ModelInvoker {
             }
         }
         return anthropicMessages;
+    }
+
+    /**
+     * 按 Anthropic 图片协议构建 image 块：{type=image, source={type=base64, media_type, data}}。
+     * imgText 支持 data URI（data:image/png;base64,...）或纯 base64 两种格式，
+     * data URI 时解析 media_type 与 base64 数据，纯 base64 时 media_type 默认 image/png。
+     */
+    private Map<String, Object> buildAnthropicImageBlock(String imgText) {
+        Map<String, Object> imageBlock = new HashMap<>();
+        imageBlock.put("type", "image");
+        Map<String, Object> source = new HashMap<>();
+        source.put("type", "base64");
+        if (imgText.startsWith("data:")) {
+            int commaIdx = imgText.indexOf(',');
+            if (commaIdx > 0) {
+                String header = imgText.substring(5, commaIdx);
+                String mediaType = header.split(";")[0];
+                source.put("media_type", mediaType);
+                source.put("data", imgText.substring(commaIdx + 1));
+            } else {
+                source.put("media_type", "image/png");
+                source.put("data", imgText);
+            }
+        } else {
+            source.put("media_type", "image/png");
+            source.put("data", imgText);
+        }
+        imageBlock.put("source", source);
+        return imageBlock;
     }
 
     private List<Map<String, Object>> buildAnthropicTools(List<ToolDefinition> tools) {

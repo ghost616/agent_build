@@ -27,6 +27,10 @@
     {
       "content": "SubSessionResultFallbackHook 应实现 SystemHook 而非 SystemPostHook，触发条件为 HookPhase.AFTER_MESSAGE_RECEIVE（按 phase 在 triggerHooks 中触发，仅 doOnComplete 一次）；不应作为 SystemPostHook 在 executePostHooks 中无条件执行。相应移除对 FinishReason.STOP 的依赖（doOnComplete 的 completeChunk 无 finishReason），仅保留 hasToolCalls 判定。",
       "timestamp": "2026-08-21T10:40:56.095Z"
+    },
+    {
+      "content": "图片对象数组（ImageContent：imgId+imgText）除加到 ChatRequest/Message/HistoryEntry 外，AgentExecutionContext.sendUserMessage、AgentMessageProxy.sendUserMessage 和 sendUserMessageToSession 也必须支持图片对象数组参数（联动 SendUserMessageCallback 接口、ChildMessageEvent 及 AgentContextManager 内部方法）。",
+      "timestamp": "2026-08-23T03:13:51.620Z"
     }
   ]
 }

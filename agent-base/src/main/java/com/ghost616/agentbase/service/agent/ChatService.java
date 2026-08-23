@@ -35,6 +35,7 @@ import com.ghost616.agentbase.service.model.invoker.ModelInvokerManager;
 
 import com.ghost616.agentbase.dto.chat.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatChunk;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolDefinition;
@@ -119,6 +120,7 @@ public class ChatService {
         boolean isToolContinue = TOOL_CONTINUE_MARKER.equals(content);
         boolean isSendUserMessage = SEND_USER_MESSAGE_MARKER.equals(content);
         String conversationId = request.getConversationId();
+        List<ImageContent> images = request.getImages();
 
         if (!isToolContinue && !isSendUserMessage) {
             contextMutator.resetStopped();
@@ -135,13 +137,14 @@ public class ChatService {
             }
             contextMutator.setConversationId(conversationId);
             sessionManager.messageSave().sessionId(sessionId).role("user").content(content)
+                    .images(images)
                     .conversationId(context.getConversationId()).save();
 
             AgentExecutionContext.HistoryEntry userEntry = new AgentExecutionContext.HistoryEntry(
                     "user", content, null, null,
                     LocalDateTime.now(),
                     Collections.emptyList(),
-                    null, null, null);
+                    null, null, null, images);
             contextMutator.addHistoryEntry(userEntry);
         }
 
@@ -391,6 +394,9 @@ public class ChatService {
         }
         if (entry.toolInfo() != null) {
             builder.toolInfo(entry.toolInfo());
+        }
+        if (entry.images() != null && !entry.images().isEmpty()) {
+            builder.images(entry.images());
         }
         return builder.build();
     }
@@ -825,8 +831,13 @@ public class ChatService {
 
         for (int g = 0; g < groups.size(); g++) {
             if (g < foldedCount) {
+                // 折叠区仅保留首条 user 消息的 content 文本（忽略图片，避免图片随折叠历史重复传给模型）
                 List<Message> group = groups.get(g);
-                result.add(group.get(0));
+                Message first = group.get(0);
+                result.add(Message.builder()
+                        .role(first.getRole())
+                        .content(first.getContent())
+                        .build());
                 result.add(Message.builder()
                         .role("assistant")
                         .content("此为历史消息索引为" + g + "，如果想要展开请调用历史消息工具")

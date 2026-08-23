@@ -1,6 +1,7 @@
 package com.ghost616.agentinteg.model.invoker;
 
 import com.ghost616.agentbase.dto.model.ChatRequest;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolDefinition;
 import org.junit.jupiter.api.BeforeEach;
@@ -103,5 +104,48 @@ class KimiInvokerTest {
         List<Map<String, Object>> tools = (List<Map<String, Object>>) body.get("tools");
         assertNotNull(tools);
         assertEquals(2, tools.size());
+    }
+
+    @Test
+    void buildMessages_userWithImages_buildsContentParts() {
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(Message.builder()
+                        .role("user")
+                        .content("describe the image")
+                        .images(List.of(
+                                ImageContent.builder().imgId("img-1")
+                                        .imgText("data:image/png;base64,AAA").build(),
+                                ImageContent.builder().imgId("img-2")
+                                        .imgText("data:image/jpeg;base64,BBB").build()))
+                        .build()))
+                .build();
+
+        Map<String, Object> body = invoker.buildRequestBody(request, false);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) body.get("messages");
+        assertEquals(1, messages.size());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content =
+                (List<Map<String, Object>>) messages.get(0).get("content");
+        assertEquals(3, content.size());
+        assertEquals("text", content.get(0).get("type"));
+        assertEquals("describe the image", content.get(0).get("text"));
+        assertEquals("image_url", content.get(1).get("type"));
+        assertEquals("data:image/png;base64,AAA",
+                ((Map<?, ?>) content.get(1).get("image_url")).get("url"));
+        assertEquals("image_url", content.get(2).get("type"));
+        assertEquals("data:image/jpeg;base64,BBB",
+                ((Map<?, ?>) content.get(2).get("image_url")).get("url"));
+    }
+
+    @Test
+    void buildMessages_userWithoutImages_keepsPlainContent() {
+        Map<String, Object> body = invoker.buildRequestBody(baseRequest(), false);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) body.get("messages");
+        assertEquals(1, messages.size());
+        assertEquals("hi", messages.get(0).get("content"));
     }
 }

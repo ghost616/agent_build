@@ -1,0 +1,1200 @@
+package com.ghost616.platform.service.agent;
+
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.ghost616.agentbase.dto.model.ImageContent;
+import com.ghost616.agentbase.dto.model.ToolInfo;
+import com.ghost616.agentbase.dto.model.UsageInfo;
+import com.ghost616.platform.exception.BusinessException;
+import com.ghost616.agentbase.service.agent.MessageDataProvider.MessageDTO;
+import com.ghost616.agentbase.service.agent.MessageDataProvider.ToolCallData;
+import com.ghost616.agentbase.service.agent.MessageDataProvider.CustomToolCallData;
+import com.ghost616.agentbase.service.agent.MessageDataProvider.WebSearchCallData;
+import com.ghost616.agentbase.service.agent.MessageDataProvider.WebSearchResultData;
+import com.ghost616.platform.dto.session.SessionMessageDTO;
+import com.ghost616.platform.entity.Message;
+import com.ghost616.platform.entity.MessageImage;
+import com.ghost616.platform.entity.MessageToolCall;
+import com.ghost616.platform.entity.Session;
+import com.ghost616.platform.repository.MessageImageMapper;
+import com.ghost616.platform.repository.MessageMapper;
+import com.ghost616.platform.repository.MessageToolCallMapper;
+import com.ghost616.platform.repository.SessionMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class DefaultMessageDataProviderTest {
+
+    @Mock
+    private MessageMapper messageMapper;
+
+    @Mock
+    private MessageToolCallMapper messageToolCallMapper;
+
+    @Mock
+    private MessageToolCallService messageToolCallService;
+
+    @Mock
+    private SessionMapper sessionMapper;
+
+    @Mock
+    private MessageImageMapper messageImageMapper;
+
+    @Captor
+    private ArgumentCaptor<Message> messageCaptor;
+
+    @Captor
+    private ArgumentCaptor<List<MessageToolCall>> batchCaptor;
+
+    private DefaultMessageDataProvider provider;
+
+    @BeforeEach
+    void setUp() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Message.class);
+        provider = new DefaultMessageDataProvider(messageMapper, messageToolCallMapper,
+                messageToolCallService, sessionMapper, messageImageMapper);
+    }
+
+    @Test
+    void saveMessage_无toolCalls_保存消息并返回ID() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(100L);
+            return 1;
+        });
+        when(sessionMapper.addTotalTokenUsed(anyLong(), anyLong())).thenReturn(1);
+
+        UsageInfo usage = UsageInfo.builder().promptTokens(10).completionTokens(20).totalTokens(30).build();
+        String result = provider.saveMessage("1", "user", "hello", null, null, null, null, usage, null, null, null, null);
+
+        assertEquals("100", result);
+        verify(messageMapper).insert(messageCaptor.capture());
+        Message saved = messageCaptor.getValue();
+        assertEquals(1L, saved.getSessionId());
+        assertEquals("user", saved.getRole());
+        assertEquals("hello", saved.getContent());
+        assertEquals(1, saved.getSequenceNum());
+        assertNotNull(saved.getTokenUsage());
+        assertTrue(saved.getTokenUsage().contains("\"totalTokens\":30"));
+        verify(messageToolCallMapper, never()).insert(any(MessageToolCall.class));
+        verify(messageToolCallService, never()).saveBatch(anyList());
+        verify(sessionMapper).addTotalTokenUsed(1L, 30L);
+    }
+
+    @Test
+    void saveMessage_有toolCalls_保存消息和工具调用() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(200L);
+            return 1;
+        });
+
+        List<ToolCallData> toolCalls = Arrays.asList(
+                new ToolCallData("tc1", "func1", "{}"),
+                new ToolCallData("tc2", "func2", "{\"key\":\"val\"}")
+        );
+
+        provider.saveMessage("1", "assistant", "response", "thinking...",
+                new ToolInfo("call-1", "tool1"), null, toolCalls, null, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        assertEquals("assistant", messageCaptor.getValue().getRole());
+        assertEquals("response", messageCaptor.getValue().getContent());
+        assertEquals("thinking...", messageCaptor.getValue().getReasoning());
+        assertEquals("call-1", messageCaptor.getValue().getToolCallId());
+        assertNull(messageCaptor.getValue().getTokenUsage());
+
+        verify(messageToolCallService, times(1)).saveBatch(batchCaptor.capture());
+        List<MessageToolCall> capturedToolCalls = batchCaptor.getValue();
+        assertEquals(3, capturedToolCalls.size());
+        assertEquals("tool_result", capturedToolCalls.get(0).getType());
+        assertEquals("call-1", capturedToolCalls.get(0).getToolCallId());
+        assertEquals("tool1", capturedToolCalls.get(0).getToolCallName());
+        assertEquals("tc1", capturedToolCalls.get(1).getToolCallId());
+        assertEquals("func1", capturedToolCalls.get(1).getToolCallName());
+        assertEquals("{}", capturedToolCalls.get(1).getToolCallArguments());
+        assertEquals("function", capturedToolCalls.get(1).getType());
+        assertEquals("tc2", capturedToolCalls.get(2).getToolCallId());
+        assertEquals("func2", capturedToolCalls.get(2).getToolCallName());
+        assertEquals("function", capturedToolCalls.get(2).getType());
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+    }
+
+    @Test
+    void saveMessage_已有消息_序列号递增() {
+        Message lastMsg = new Message();
+        lastMsg.setSequenceNum(5);
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(lastMsg);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(300L);
+            return 1;
+        });
+
+        provider.saveMessage("1", "user", "next", null, null, null, null, null, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        assertEquals(6, messageCaptor.getValue().getSequenceNum());
+    }
+
+    @Test
+    void saveMessage_toolCalls为null_不插入工具调用() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(400L);
+            return 1;
+        });
+
+        provider.saveMessage("1", "user", "test", null, null, null, null, null, null, null, null, null);
+
+        verify(messageMapper).insert(any(Message.class));
+        verify(messageToolCallMapper, never()).insert(any(MessageToolCall.class));
+        verify(messageToolCallService, never()).saveBatch(anyList());
+    }
+
+    @Test
+    void getMessages_有toolCalls_返回MessageDTO且usage为null() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("assistant");
+        msg.setContent("response");
+        msg.setReasoning("reason");
+        msg.setToolCallId("tc-id");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.of(2026, 1, 1, 0, 0));
+        msg.setToolResult("result");
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+
+        MessageToolCall mtc = new MessageToolCall();
+        mtc.setToolCallId("call-1");
+        mtc.setToolCallName("func1");
+        mtc.setToolCallArguments("{}");
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(mtc));
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        MessageDTO dto = result.get(0);
+        assertEquals("1", dto.id());
+        assertEquals("10", dto.sessionId());
+        assertEquals("assistant", dto.role());
+        assertEquals("response", dto.content());
+        assertEquals("reason", dto.reasoning());
+        assertNotNull(dto.toolInfo());
+        assertEquals("tc-id", dto.toolInfo().toolCallId());
+        assertNull(dto.toolInfo().toolName());
+        assertEquals(msg.getCreateTime(), dto.createTime());
+        assertEquals("result", dto.toolResult());
+        assertNull(dto.usage());
+        assertEquals(1, dto.toolCalls().size());
+        assertEquals("call-1", dto.toolCalls().get(0).toolCallId());
+        assertEquals("func1", dto.toolCalls().get(0).toolCallName());
+    }
+
+    @Test
+    void getMessages_无toolCalls_toolCalls为空列表usage为null() {
+        Message msg = new Message();
+        msg.setId(2L);
+        msg.setSessionId(10L);
+        msg.setRole("user");
+        msg.setContent("hi");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        assertTrue(result.get(0).toolCalls().isEmpty());
+        assertNull(result.get(0).usage());
+    }
+
+    @Test
+    void getMessages_无消息_返回空列表() {
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("999");
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void rollbackToLastUserMessage_存在用户消息_标记rollback后续消息() {
+        Message userMsg = new Message();
+        userMsg.setId(5L);
+        userMsg.setSequenceNum(3);
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(userMsg);
+
+        Message msg1 = new Message();
+        msg1.setId(5L);
+        msg1.setTokenUsage("{\"totalTokens\":20}");
+        Message msg2 = new Message();
+        msg2.setId(6L);
+        msg2.setTokenUsage("{\"promptTokens\":5,\"completionTokens\":10,\"totalTokens\":15}");
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Arrays.asList(msg1, msg2));
+        when(messageToolCallMapper.deleteByMessageIds(anyList())).thenReturn(2);
+        when(messageMapper.rollbackBySessionIdAndGeSequenceNum(10L, 3)).thenReturn(2);
+
+        int deleted = provider.rollbackToLastUserMessage("10");
+
+        assertEquals(2, deleted);
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+        verify(messageToolCallMapper).deleteByMessageIds(Arrays.asList(5L, 6L));
+        verify(messageMapper).rollbackBySessionIdAndGeSequenceNum(10L, 3);
+    }
+
+    @Test
+    void rollbackToLastUserMessage_无用户消息_抛出BusinessException() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+
+        assertThrows(BusinessException.class, () -> provider.rollbackToLastUserMessage("1"));
+        verify(messageMapper, never()).rollbackBySessionIdAndGeSequenceNum(any(), any());
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+    }
+
+    @Test
+    void rollbackToLastUserMessage_无tokenUsage_不扣减() {
+        Message userMsg = new Message();
+        userMsg.setId(5L);
+        userMsg.setSequenceNum(3);
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(userMsg);
+
+        Message msg = new Message();
+        msg.setId(5L);
+        msg.setTokenUsage(null);
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.deleteByMessageIds(anyList())).thenReturn(1);
+        when(messageMapper.rollbackBySessionIdAndGeSequenceNum(10L, 3)).thenReturn(1);
+
+        int deleted = provider.rollbackToLastUserMessage("10");
+
+        assertEquals(1, deleted);
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+    }
+
+    @Test
+    void rollbackToLastUserMessage_tokenUsage解析异常_跳过该消息() {
+        Message userMsg = new Message();
+        userMsg.setId(5L);
+        userMsg.setSequenceNum(3);
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(userMsg);
+
+        Message msg1 = new Message();
+        msg1.setId(5L);
+        msg1.setTokenUsage("{invalid");
+        Message msg2 = new Message();
+        msg2.setId(6L);
+        msg2.setTokenUsage("{\"totalTokens\":10}");
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Arrays.asList(msg1, msg2));
+        when(messageToolCallMapper.deleteByMessageIds(anyList())).thenReturn(2);
+        when(messageMapper.rollbackBySessionIdAndGeSequenceNum(10L, 3)).thenReturn(2);
+
+        int deleted = provider.rollbackToLastUserMessage("10");
+
+        assertEquals(2, deleted);
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+    }
+
+    @Test
+    void saveMessage_usage不为null_序列化tokenUsage并原子累加() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(500L);
+            return 1;
+        });
+        when(sessionMapper.addTotalTokenUsed(anyLong(), anyLong())).thenReturn(1);
+
+        UsageInfo usage = UsageInfo.builder().promptTokens(5).completionTokens(15).totalTokens(20).build();
+        provider.saveMessage("1", "assistant", "reply", null, null, null, null, usage, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        Message saved = messageCaptor.getValue();
+        assertNotNull(saved.getTokenUsage());
+        assertTrue(saved.getTokenUsage().contains("\"promptTokens\":5"));
+        assertTrue(saved.getTokenUsage().contains("\"completionTokens\":15"));
+        assertTrue(saved.getTokenUsage().contains("\"totalTokens\":20"));
+        verify(sessionMapper).addTotalTokenUsed(1L, 20L);
+    }
+
+    @Test
+    void saveMessage_usage为null_不序列化tokenUsage不累加() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(600L);
+            return 1;
+        });
+
+        provider.saveMessage("1", "user", "no usage", null, null, null, null, null, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        assertNull(messageCaptor.getValue().getTokenUsage());
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+    }
+
+    @Test
+    void saveMessage_totalTokens为null_使用prompt加completion降级计算() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(700L);
+            return 1;
+        });
+        when(sessionMapper.addTotalTokenUsed(anyLong(), anyLong())).thenReturn(1);
+
+        UsageInfo usage = UsageInfo.builder().promptTokens(8).completionTokens(12).totalTokens(null).build();
+        provider.saveMessage("1", "assistant", "fallback", null, null, null, null, usage, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        assertNotNull(messageCaptor.getValue().getTokenUsage());
+        verify(sessionMapper).addTotalTokenUsed(1L, 20L);
+    }
+
+    @Test
+    void saveMessage_promptCompletion均为null_不累加() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(800L);
+            return 1;
+        });
+
+        UsageInfo usage = UsageInfo.builder().promptTokens(null).completionTokens(null).totalTokens(null).build();
+        provider.saveMessage("1", "assistant", "zero", null, null, null, null, usage, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        assertNotNull(messageCaptor.getValue().getTokenUsage());
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+    }
+
+    @Test
+    void saveMessage_totalTokens为0_不累加() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(900L);
+            return 1;
+        });
+
+        UsageInfo usage = UsageInfo.builder().promptTokens(0).completionTokens(0).totalTokens(0).build();
+        provider.saveMessage("1", "assistant", "zero tokens", null, null, null, null, usage, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        assertNotNull(messageCaptor.getValue().getTokenUsage());
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+    }
+
+    @Test
+    void getMessages_tokenUsage存在_反序列化为UsageInfo() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("assistant");
+        msg.setContent("with usage");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        msg.setTokenUsage("{\"promptTokens\":8,\"completionTokens\":12,\"totalTokens\":20}");
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        MessageDTO dto = result.get(0);
+        assertNotNull(dto.usage());
+        assertEquals(8, dto.usage().getPromptTokens());
+        assertEquals(12, dto.usage().getCompletionTokens());
+        assertEquals(20, dto.usage().getTotalTokens());
+    }
+
+    @Test
+    void getMessages_tokenUsage为null_返回nullusage() {
+        Message msg = new Message();
+        msg.setId(2L);
+        msg.setSessionId(10L);
+        msg.setRole("user");
+        msg.setContent("no usage");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        msg.setTokenUsage(null);
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        assertNull(result.get(0).usage());
+    }
+
+    @Test
+    void getMessages_tokenUsage为空字符串_返回nullusage() {
+        Message msg = new Message();
+        msg.setId(3L);
+        msg.setSessionId(10L);
+        msg.setRole("user");
+        msg.setContent("empty");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        msg.setTokenUsage("");
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        assertNull(result.get(0).usage());
+    }
+
+    @Test
+    void getMessages_tokenUsage无效JSON_返回nullusage不抛异常() {
+        Message msg = new Message();
+        msg.setId(4L);
+        msg.setSessionId(10L);
+        msg.setRole("user");
+        msg.setContent("bad json");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        msg.setTokenUsage("{invalid");
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        assertNull(result.get(0).usage());
+    }
+
+    @Test
+    void rollbackToLastUserMessage_tokenUsage为空字符串_跳过该消息() {
+        Message userMsg = new Message();
+        userMsg.setId(5L);
+        userMsg.setSequenceNum(3);
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(userMsg);
+
+        Message msg = new Message();
+        msg.setId(5L);
+        msg.setTokenUsage("");
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.deleteByMessageIds(anyList())).thenReturn(1);
+        when(messageMapper.rollbackBySessionIdAndGeSequenceNum(10L, 3)).thenReturn(1);
+
+        provider.rollbackToLastUserMessage("10");
+
+        verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
+    }
+
+    @Test
+    void saveMessage_有webSearchCall_写入webSearchCall行() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(1000L);
+            return 1;
+        });
+
+        List<WebSearchCallData> webSearchCall = Collections.singletonList(
+                new WebSearchCallData("item-1", 0,
+                        Collections.singletonList(new WebSearchResultData("title", "url", "snippet"))));
+
+        provider.saveMessage("1", "assistant", "searching", null, null, null, null, null, webSearchCall, null, null, null);
+
+        verify(messageToolCallService, times(1)).saveBatch(batchCaptor.capture());
+        List<MessageToolCall> capturedList = batchCaptor.getValue();
+        assertEquals(1, capturedList.size());
+        MessageToolCall captured = capturedList.get(0);
+        assertEquals("web_search_call", captured.getType());
+        assertNotNull(captured.getWebSearchCall());
+        assertTrue(captured.getWebSearchCall().startsWith("{"));
+        assertTrue(captured.getWebSearchCall().contains("\"itemId\":\"item-1\""));
+        assertTrue(captured.getWebSearchCall().endsWith("}"));
+    }
+
+    @Test
+    void saveMessage_webSearchCall多个元素_每个元素单独写入一行() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(1004L);
+            return 1;
+        });
+
+        List<WebSearchCallData> webSearchCall = Arrays.asList(
+                new WebSearchCallData("item-1", 0, Collections.emptyList()),
+                new WebSearchCallData("item-2", 1, Collections.emptyList()));
+
+        provider.saveMessage("1", "assistant", "search", null, null, null, null, null, webSearchCall, null, null, null);
+
+        verify(messageToolCallService, times(1)).saveBatch(batchCaptor.capture());
+        List<MessageToolCall> capturedList = batchCaptor.getValue();
+        assertEquals(2, capturedList.size());
+        assertEquals("web_search_call", capturedList.get(0).getType());
+        String json0 = capturedList.get(0).getWebSearchCall();
+        assertNotNull(json0);
+        assertTrue(json0.startsWith("{"));
+        assertTrue(json0.contains("\"itemId\":\"item-1\""));
+        assertFalse(json0.contains("\"itemId\":\"item-2\""));
+        assertEquals("web_search_call", capturedList.get(1).getType());
+        String json1 = capturedList.get(1).getWebSearchCall();
+        assertNotNull(json1);
+        assertTrue(json1.startsWith("{"));
+        assertTrue(json1.contains("\"itemId\":\"item-2\""));
+        assertFalse(json1.contains("\"itemId\":\"item-1\""));
+        assertTrue(json1.endsWith("}"));
+    }
+
+    @Test
+    void saveMessage_有customToolCall_写入customToolCall行() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(1001L);
+            return 1;
+        });
+
+        List<CustomToolCallData> customToolCall = Collections.singletonList(
+                new CustomToolCallData("item-2", 1, "{\"a\":1}", "{\"b\":2}"));
+
+        provider.saveMessage("1", "assistant", "custom", null, null, null, null, null, null, customToolCall, null, null);
+
+        verify(messageToolCallService, times(1)).saveBatch(batchCaptor.capture());
+        List<MessageToolCall> capturedList = batchCaptor.getValue();
+        assertEquals(1, capturedList.size());
+        MessageToolCall captured = capturedList.get(0);
+        assertEquals("custom_tool_call", captured.getType());
+        assertNotNull(captured.getCustomToolCall());
+        assertTrue(captured.getCustomToolCall().startsWith("{"));
+        assertTrue(captured.getCustomToolCall().contains("\"itemId\":\"item-2\""));
+        assertTrue(captured.getCustomToolCall().endsWith("}"));
+    }
+
+    @Test
+    void saveMessage_有images_插入MessageImage行() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(1005L);
+            return 1;
+        });
+
+        List<ImageContent> images = Arrays.asList(
+                ImageContent.builder().imgId("img-1").imgText("data:image/png;base64,AAA").build(),
+                ImageContent.builder().imgId("img-2").imgText("data:image/jpeg;base64,BBB").build());
+
+        provider.saveMessage("1", "user", "看图", null, null, null, null, null, null, null, null, images);
+
+        verify(messageImageMapper, times(2)).insert(any(MessageImage.class));
+        ArgumentCaptor<MessageImage> imgCaptor = ArgumentCaptor.forClass(MessageImage.class);
+        verify(messageImageMapper, times(2)).insert(imgCaptor.capture());
+        List<MessageImage> capturedImages = imgCaptor.getAllValues();
+        assertEquals(1005L, capturedImages.get(0).getMessageId());
+        assertEquals("img-1", capturedImages.get(0).getImgId());
+        assertEquals("data:image/png;base64,AAA", capturedImages.get(0).getImgText());
+        assertEquals("img-2", capturedImages.get(1).getImgId());
+        assertEquals("data:image/jpeg;base64,BBB", capturedImages.get(1).getImgText());
+    }
+
+    @Test
+    void saveMessage_images为null_不插入MessageImage行() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(1006L);
+            return 1;
+        });
+
+        provider.saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null, null);
+
+        verify(messageImageMapper, never()).insert(any(MessageImage.class));
+    }
+
+    @Test
+    void getMessages_有messageImage行_返回MessageDTOimages() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("user");
+        msg.setContent("看图");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        MessageImage img1 = new MessageImage();
+        img1.setImgId("img-1");
+        img1.setImgText("data:image/png;base64,AAA");
+        MessageImage img2 = new MessageImage();
+        img2.setImgId("img-2");
+        img2.setImgText("data:image/jpeg;base64,BBB");
+        when(messageImageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Arrays.asList(img1, img2));
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        MessageDTO dto = result.get(0);
+        assertNotNull(dto.images());
+        assertEquals(2, dto.images().size());
+        assertEquals("img-1", dto.images().get(0).getImgId());
+        assertEquals("data:image/png;base64,AAA", dto.images().get(0).getImgText());
+        assertEquals("img-2", dto.images().get(1).getImgId());
+    }
+
+    @Test
+    void getMessages_无messageImage行_返回nullimages() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("user");
+        msg.setContent("hi");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+        when(messageImageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        assertNull(result.get(0).images());
+    }
+
+    @Test
+    void saveMessage_toolCall带type_写入type字段() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(1002L);
+            return 1;
+        });
+
+        List<ToolCallData> toolCalls = Collections.singletonList(
+                new ToolCallData("tc-x", "func-x", "{}", "web_search_call"));
+        provider.saveMessage("1", "assistant", "resp", null, null, null, toolCalls, null, null, null, null, null);
+
+        verify(messageToolCallService, times(1)).saveBatch(batchCaptor.capture());
+        List<MessageToolCall> capturedList = batchCaptor.getValue();
+        assertEquals(1, capturedList.size());
+        assertEquals("web_search_call", capturedList.get(0).getType());
+    }
+
+    @Test
+    void saveMessage_同时有toolCalls和webSearchCall_customToolCall_分别写入对应行() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(1003L);
+            return 1;
+        });
+
+        List<ToolCallData> toolCalls = Collections.singletonList(new ToolCallData("tc1", "func1", "{}"));
+        List<WebSearchCallData> webSearchCall = Collections.singletonList(
+                new WebSearchCallData("item-1", 0, Collections.emptyList()));
+        List<CustomToolCallData> customToolCall = Collections.singletonList(
+                new CustomToolCallData("item-2", 1, "in", "out"));
+
+        provider.saveMessage("1", "assistant", "multi", null, null, null, toolCalls, null,
+                webSearchCall, customToolCall, null, null);
+
+        verify(messageToolCallService, times(1)).saveBatch(batchCaptor.capture());
+        List<MessageToolCall> captured = batchCaptor.getValue();
+        assertEquals(3, captured.size());
+        assertEquals("function", captured.get(0).getType());
+        assertEquals("tc1", captured.get(0).getToolCallId());
+        assertEquals("web_search_call", captured.get(1).getType());
+        assertNotNull(captured.get(1).getWebSearchCall());
+        assertEquals("custom_tool_call", captured.get(2).getType());
+        assertNotNull(captured.get(2).getCustomToolCall());
+    }
+
+    @Test
+    void getMessages_有webSearchCall和customToolCall_反序列化到DTO() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("assistant");
+        msg.setContent("resp");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+
+        MessageToolCall webMtc1 = new MessageToolCall();
+        webMtc1.setType("web_search_call");
+        webMtc1.setWebSearchCall("{\"itemId\":\"item-1\",\"outputIndex\":0,\"results\":[{\"title\":\"t\",\"url\":\"u\",\"snippet\":\"s\"}]}");
+        MessageToolCall webMtc2 = new MessageToolCall();
+        webMtc2.setType("web_search_call");
+        webMtc2.setWebSearchCall("{\"itemId\":\"item-3\",\"outputIndex\":1,\"results\":[]}");
+        MessageToolCall customMtc = new MessageToolCall();
+        customMtc.setType("custom_tool_call");
+        customMtc.setCustomToolCall("{\"itemId\":\"item-2\",\"outputIndex\":1,\"input\":\"{\\\"a\\\":1}\",\"output\":\"{\\\"b\\\":2}\"}");
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(Arrays.asList(webMtc1, customMtc, webMtc2));
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(1, result.size());
+        MessageDTO dto = result.get(0);
+        assertNotNull(dto.webSearchCall());
+        assertEquals(2, dto.webSearchCall().size());
+        assertEquals("item-1", dto.webSearchCall().get(0).itemId());
+        assertEquals(0, dto.webSearchCall().get(0).outputIndex());
+        assertEquals(1, dto.webSearchCall().get(0).results().size());
+        assertEquals("t", dto.webSearchCall().get(0).results().get(0).title());
+        assertEquals("u", dto.webSearchCall().get(0).results().get(0).url());
+        assertEquals("s", dto.webSearchCall().get(0).results().get(0).snippet());
+        assertEquals("item-3", dto.webSearchCall().get(1).itemId());
+        assertEquals(1, dto.webSearchCall().get(1).outputIndex());
+        assertTrue(dto.webSearchCall().get(1).results().isEmpty());
+        assertNotNull(dto.customToolCall());
+        assertEquals(1, dto.customToolCall().size());
+        assertEquals("item-2", dto.customToolCall().get(0).itemId());
+        assertEquals(1, dto.customToolCall().get(0).outputIndex());
+        assertEquals("{\"a\":1}", dto.customToolCall().get(0).input());
+        assertEquals("{\"b\":2}", dto.customToolCall().get(0).output());
+        assertTrue(dto.toolCalls().isEmpty());
+    }
+
+    @Test
+    void getMessages_toolCall带type_返回type() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("assistant");
+        msg.setContent("resp");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+
+        MessageToolCall mtc = new MessageToolCall();
+        mtc.setToolCallId("call-9");
+        mtc.setToolCallName("custom_func");
+        mtc.setToolCallArguments("{}");
+        mtc.setType("custom_tool_call");
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(mtc));
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        MessageDTO dto = result.get(0);
+        assertEquals(1, dto.toolCalls().size());
+        assertEquals("call-9", dto.toolCalls().get(0).toolCallId());
+        assertEquals("custom_func", dto.toolCalls().get(0).toolCallName());
+        assertEquals("custom_tool_call", dto.toolCalls().get(0).type());
+        assertNull(dto.webSearchCall());
+        assertNull(dto.customToolCall());
+    }
+
+    @Test
+    void getMessages_webSearchCallJSON无效_返回null不抛异常() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("assistant");
+        msg.setContent("resp");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+
+        MessageToolCall webMtc = new MessageToolCall();
+        webMtc.setType("web_search_call");
+        webMtc.setWebSearchCall("{invalid");
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(webMtc));
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        MessageDTO dto = result.get(0);
+        assertNull(dto.webSearchCall());
+        assertTrue(dto.toolCalls().isEmpty());
+    }
+
+    @Test
+    void getMessages_customToolCallJSON无效_返回null不抛异常() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("assistant");
+        msg.setContent("resp");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+
+        MessageToolCall customMtc = new MessageToolCall();
+        customMtc.setType("custom_tool_call");
+        customMtc.setCustomToolCall("{invalid");
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(customMtc));
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        MessageDTO dto = result.get(0);
+        assertNull(dto.customToolCall());
+        assertTrue(dto.toolCalls().isEmpty());
+    }
+
+    @Test
+    void saveMessage_有toolInfo_写入tool_result行() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(2000L);
+            return 1;
+        });
+
+        provider.saveMessage("1", "tool", "{\"temp\":25}",
+                null, new ToolInfo("call-9", "getWeather"), "{\"status\":\"success\"}", null, null, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        assertEquals("call-9", messageCaptor.getValue().getToolCallId());
+
+        verify(messageToolCallService, times(1)).saveBatch(batchCaptor.capture());
+        List<MessageToolCall> capturedList = batchCaptor.getValue();
+        assertEquals(1, capturedList.size());
+        assertEquals("tool_result", capturedList.get(0).getType());
+        assertEquals("call-9", capturedList.get(0).getToolCallId());
+        assertEquals("getWeather", capturedList.get(0).getToolCallName());
+    }
+
+    @Test
+    void saveMessage_toolInfo为null_不写入tool_result行() {
+        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(messageMapper.insert(any(Message.class))).thenAnswer(invocation -> {
+            Message msg = invocation.getArgument(0);
+            msg.setId(2001L);
+            return 1;
+        });
+
+        provider.saveMessage("1", "tool", "result", null, null, null, null, null, null, null, null, null);
+
+        verify(messageMapper).insert(messageCaptor.capture());
+        assertNull(messageCaptor.getValue().getToolCallId());
+        verify(messageToolCallService, never()).saveBatch(anyList());
+    }
+
+    @Test
+    void getMessages_有tool_result行_从MessageToolCall构造ToolInfo() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("tool");
+        msg.setContent("{\"temp\":25}");
+        msg.setToolCallId("call-9");
+        msg.setSequenceNum(2);
+        msg.setCreateTime(LocalDateTime.now());
+        msg.setToolResult("{\"status\":\"success\"}");
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+
+        MessageToolCall toolResultMtc = new MessageToolCall();
+        toolResultMtc.setType("tool_result");
+        toolResultMtc.setToolCallId("call-9");
+        toolResultMtc.setToolCallName("getWeather");
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(toolResultMtc));
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        MessageDTO dto = result.get(0);
+        assertNotNull(dto.toolInfo());
+        assertEquals("call-9", dto.toolInfo().toolCallId());
+        assertEquals("getWeather", dto.toolInfo().toolName());
+        assertTrue(dto.toolCalls().isEmpty());
+    }
+
+    @Test
+    void getMessages_无匹配toolCallId_构造仅含toolCallId的ToolInfo() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("tool");
+        msg.setContent("result");
+        msg.setToolCallId("legacy-id");
+        msg.setSequenceNum(2);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+
+        MessageToolCall mtc = new MessageToolCall();
+        mtc.setToolCallId("other-id");
+        mtc.setToolCallName("otherFunc");
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(mtc));
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        MessageDTO dto = result.get(0);
+        assertNotNull(dto.toolInfo());
+        assertEquals("legacy-id", dto.toolInfo().toolCallId());
+        assertNull(dto.toolInfo().toolName());
+    }
+
+    @Test
+    void getMessages_无toolCallId_toolInfo为null() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("user");
+        msg.setContent("hi");
+        msg.setSequenceNum(1);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(msg));
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertNull(result.get(0).toolInfo());
+    }
+
+    private Message buildMessage(long id, String role, String content, int seq) {
+        Message msg = new Message();
+        msg.setId(id);
+        msg.setSessionId(10L);
+        msg.setRole(role);
+        msg.setContent(content);
+        msg.setSequenceNum(seq);
+        msg.setCreateTime(LocalDateTime.now());
+        return msg;
+    }
+
+    private void mockSession() {
+        Session session = new Session();
+        session.setId(10L);
+        when(sessionMapper.selectById(10L)).thenReturn(session);
+    }
+
+    @Test
+    void getMessages_session无agentId_返回全部() {
+        Session session = new Session();
+        session.setId(10L);
+        when(sessionMapper.selectById(10L)).thenReturn(session);
+        List<Message> messages = List.of(
+                buildMessage(1L, "user", "u1", 1),
+                buildMessage(2L, "assistant", "a1", 2),
+                buildMessage(3L, "user", "u2", 3)
+        );
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(messages);
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(3, result.size());
+    }
+
+    @Test
+    void getMessages_session不存在_返回全部() {
+        when(sessionMapper.selectById(10L)).thenReturn(null);
+        List<Message> messages = List.of(
+                buildMessage(1L, "user", "u1", 1),
+                buildMessage(2L, "assistant", "a1", 2)
+        );
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(messages);
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        List<MessageDTO> result = provider.getMessages("10");
+
+        assertEquals(2, result.size());
+    }
+
+    @Test
+    void getMessages_memoryPoint非空_添加ge过滤条件() {
+        Session session = new Session();
+        session.setId(10L);
+        session.setAgentId(5L);
+        session.setMemoryPointSequenceNum(4);
+        when(sessionMapper.selectById(10L)).thenReturn(session);
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        provider.getMessages("10");
+
+        ArgumentCaptor<LambdaQueryWrapper<Message>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(messageMapper).selectList(captor.capture());
+        String sql = captor.getValue().getTargetSql();
+        assertTrue(sql.contains("sequence_num >= ?"));
+    }
+
+    @Test
+    void getMessages_memoryPoint为null_不添加ge过滤条件() {
+        mockSession();
+        List<Message> messages = List.of(
+                buildMessage(1L, "user", "u1", 1),
+                buildMessage(2L, "assistant", "a1", 2)
+        );
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(messages);
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        provider.getMessages("10");
+
+        ArgumentCaptor<LambdaQueryWrapper<Message>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(messageMapper).selectList(captor.capture());
+        String sql = captor.getValue().getTargetSql();
+        assertFalse(sql.contains("sequence_num >= ?"));
+    }
+
+    private java.util.concurrent.ConcurrentHashMap<Long, Object> getMemoryPointCache() throws Exception {
+        java.lang.reflect.Field field = DefaultMessageDataProvider.class.getDeclaredField("memoryPointCache");
+        field.setAccessible(true);
+        return (java.util.concurrent.ConcurrentHashMap<Long, Object>) field.get(provider);
+    }
+
+    private void expireAllCacheEntries() throws Exception {
+        java.util.concurrent.ConcurrentHashMap<Long, Object> cache = getMemoryPointCache();
+        for (Object entry : cache.values()) {
+            java.lang.reflect.Field expireField = entry.getClass().getDeclaredField("expireAt");
+            expireField.setAccessible(true);
+            expireField.set(entry, System.currentTimeMillis() - 1000L);
+        }
+    }
+
+    @Test
+    void getMessages_缓存命中_仅查询一次session() throws Exception {
+        mockSession();
+        List<Message> messages = List.of(
+                buildMessage(1L, "user", "u1", 1),
+                buildMessage(2L, "assistant", "a1", 2)
+        );
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(messages);
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        provider.getMessages("10");
+        provider.getMessages("10");
+
+        verify(sessionMapper, times(1)).selectById(10L);
+    }
+
+    @Test
+    void getMessages_缓存过期_重新查询session() throws Exception {
+        mockSession();
+        List<Message> messages = List.of(
+                buildMessage(1L, "user", "u1", 1),
+                buildMessage(2L, "assistant", "a1", 2)
+        );
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(messages);
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        provider.getMessages("10");
+        expireAllCacheEntries();
+        provider.getMessages("10");
+
+        verify(sessionMapper, times(2)).selectById(10L);
+    }
+
+    @Test
+    void getMessages_不同session_各自查询一次() throws Exception {
+        Session session10 = new Session();
+        session10.setId(10L);
+        session10.setAgentId(5L);
+        when(sessionMapper.selectById(10L)).thenReturn(session10);
+        Session session11 = new Session();
+        session11.setId(11L);
+        session11.setAgentId(6L);
+        when(sessionMapper.selectById(11L)).thenReturn(session11);
+
+        List<Message> messages = List.of(
+                buildMessage(1L, "user", "u1", 1),
+                buildMessage(2L, "assistant", "a1", 2)
+        );
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(messages);
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        provider.getMessages("10");
+        provider.getMessages("11");
+
+        verify(sessionMapper).selectById(10L);
+        verify(sessionMapper).selectById(11L);
+    }
+
+    @Test
+    void getMessages_session不存在_缓存null不重复查询() throws Exception {
+        when(sessionMapper.selectById(10L)).thenReturn(null);
+        List<Message> messages = List.of(
+                buildMessage(1L, "user", "u1", 1)
+        );
+        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(messages);
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        provider.getMessages("10");
+        provider.getMessages("10");
+
+        verify(sessionMapper, times(1)).selectById(10L);
+    }
+
+    @Test
+    void toSessionMessageDTOs_映射全部字段含sequenceNum() {
+        Message msg = new Message();
+        msg.setId(1L);
+        msg.setSessionId(10L);
+        msg.setRole("assistant");
+        msg.setContent("response");
+        msg.setReasoning("reason");
+        msg.setSequenceNum(3);
+        msg.setToolCallId("call-1");
+        msg.setCreateTime(LocalDateTime.of(2026, 1, 1, 0, 0));
+        msg.setToolResult("result");
+
+        MessageToolCall mtc = new MessageToolCall();
+        mtc.setToolCallId("call-1");
+        mtc.setToolCallName("func1");
+        mtc.setToolCallArguments("{}");
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.singletonList(mtc));
+
+        List<SessionMessageDTO> result = provider.toSessionMessageDTOs(List.of(msg));
+
+        assertEquals(1, result.size());
+        SessionMessageDTO dto = result.get(0);
+        assertEquals("1", dto.getId());
+        assertEquals("10", dto.getSessionId());
+        assertEquals("assistant", dto.getRole());
+        assertEquals("response", dto.getContent());
+        assertEquals("reason", dto.getReasoning());
+        assertEquals(Integer.valueOf(3), dto.getSequenceNum());
+        assertEquals(msg.getCreateTime(), dto.getCreateTime());
+        assertEquals("result", dto.getToolResult());
+        assertNotNull(dto.getToolInfo());
+        assertEquals("call-1", dto.getToolInfo().toolCallId());
+        assertEquals(1, dto.getToolCalls().size());
+        assertEquals("call-1", dto.getToolCalls().get(0).toolCallId());
+        assertEquals("func1", dto.getToolCalls().get(0).toolCallName());
+        assertEquals("{}", dto.getToolCalls().get(0).toolCallArguments());
+    }
+
+    @Test
+    void toSessionMessageDTOs_空列表_返回空列表() {
+        List<SessionMessageDTO> result = provider.toSessionMessageDTOs(List.of());
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void toSessionMessageDTO_单条映射保留sequenceNum() {
+        Message msg = new Message();
+        msg.setId(5L);
+        msg.setSessionId(20L);
+        msg.setRole("user");
+        msg.setContent("hi");
+        msg.setSequenceNum(7);
+        msg.setCreateTime(LocalDateTime.now());
+        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
+
+        SessionMessageDTO dto = provider.toSessionMessageDTOs(List.of(msg)).get(0);
+
+        assertEquals(Integer.valueOf(7), dto.getSequenceNum());
+        assertEquals("20", dto.getSessionId());
+        assertEquals("user", dto.getRole());
+        assertTrue(dto.getToolCalls().isEmpty());
+    }
+}

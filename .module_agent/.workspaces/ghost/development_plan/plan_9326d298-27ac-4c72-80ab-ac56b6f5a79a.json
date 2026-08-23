@@ -1,0 +1,11 @@
+{
+  "plan_id": "plan_9326d298-27ac-4c72-80ab-ac56b6f5a79a",
+  "module_name": "platform-app",
+  "development_plan": "支持大模型图像理解——消息图片映射持久化实现（仅 service 层，不动 Controller）。任务：1) MessageServiceImpl（及其实现的 MessageDataProvider.saveMessage）支持 images 参数：保存消息时同时写入 message_image 映射表（messageId/imgId/imgText，依赖 platform-data 新增的 MessageImage 实体与 Mapper）；2) 读取消息（getMessages 等返回链路）时联查 message_image 映射表，将 images 组装回消息 DTO（含 ImageContent.imgId/imgText）；3) 涉及消息回滚（rollback）时同步清理/处理 message_image 映射记录；4) 同步更新受影响单元测试。imgId 仅供前端后续调用接口获取图片信息，Controller 层暂不新增接口。",
+  "session_id": "e88d9fc5-74e5-4ae1-942d-cf39ae1d6311",
+  "modified_files": [
+    "platform-app/src/main/java/com/ghost616/platform/dto/session/SessionMessageDTO.java",
+    "platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultMessageDataProvider.java",
+    "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultMessageDataProviderTest.java"
+  ]
+}

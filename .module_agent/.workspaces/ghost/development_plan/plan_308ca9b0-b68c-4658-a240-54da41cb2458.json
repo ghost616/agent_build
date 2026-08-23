@@ -1,0 +1,14 @@
+{
+  "plan_id": "plan_308ca9b0-b68c-4658-a240-54da41cb2458",
+  "module_name": "platform-data",
+  "development_plan": "支持大模型图像理解——图片映射表持久化层。任务：1) 新建 entity/MessageImage.java（@TableName(\"message_image\")，字段：id、messageId、imgId、imgText，参照 Message 实体风格，含序列化注解）；2) 新建 repository/MessageImageMapper.java（继承 MyBatis-Plus BaseMapper）；3) schema-message.sql 添加 message_image 建表语句（message_id、img_id、img_text，含外键/索引可选）；4) MessageSchemaMigration 添加 message_image 建表迁移（与其他表一致，通过 AbstractSchemaMigration 机制执行）。",
+  "session_id": "a8367191-3f78-4a84-9ec5-b7448608a77a",
+  "modified_files": [
+    "platform-data/src/main/java/com/ghost616/platform/entity/MessageImage.java",
+    "platform-data/src/main/java/com/ghost616/platform/repository/MessageImageMapper.java",
+    "platform-data/src/main/resources/schema-message.sql",
+    "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java",
+    "platform-data/src/test/java/com/ghost616/platform/MessageImageSchemaTest.java",
+    "platform-app/src/test/java/com/ghost616/platform/migration/SchemaMigrationTest.java"
+  ]
+}

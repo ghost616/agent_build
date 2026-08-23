@@ -1,0 +1,88 @@
+package com.ghost616.agentinteg.model.invoker;
+
+import com.ghost616.agentbase.dto.model.EmbeddingRequest;
+import com.ghost616.agentbase.dto.model.ModelConfigData;
+import com.ghost616.agentbase.enums.RequestType;
+import com.ghost616.agentbase.service.model.invoker.ModelInvoker;
+import com.ghost616.agentinteg.model.PlatformType;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class SiliconFlowInvokerTest {
+
+    private SiliconFlowInvoker invoker;
+
+    @BeforeEach
+    void setUp() {
+        invoker = new SiliconFlowInvoker(
+                "test-key", "https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V3",
+                0.7, 2048, RestClient.builder(), WebClient.builder());
+    }
+
+    @Test
+    void inheritsEmbedSupportFromOpenAIInvoker() {
+        Map<String, Object> body = invoker.buildEmbeddingRequestBody(
+                EmbeddingRequest.builder().input("hello").build());
+
+        assertEquals("deepseek-ai/DeepSeek-V3", body.get("model"));
+        assertEquals("hello", body.get("input"));
+    }
+
+    @Test
+    void inheritsEmbeddingsUrlFromOpenAIInvoker() {
+        assertEquals("https://api.siliconflow.cn/v1/embeddings", invoker.buildEmbeddingsUrl());
+    }
+
+    @Test
+    void factoryCreatesSiliconFlowInvokerForChatCompletions() {
+        DefaultModelInvokerFactory factory = new DefaultModelInvokerFactory(
+                RestClient.builder(), WebClient.builder());
+
+        ModelConfigData config = new ModelConfigData(
+                "1", "key", "https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V3",
+                0.7, 2048, "SILICONFLOW", RequestType.COMPLETIONS.getCode());
+        ModelInvoker created = factory.createInvoker(config);
+
+        assertTrue(created instanceof SiliconFlowInvoker);
+    }
+
+    @Test
+    void factoryCreatesSiliconFlowInvokerWhenNoRequestType() {
+        DefaultModelInvokerFactory factory = new DefaultModelInvokerFactory(
+                RestClient.builder(), WebClient.builder());
+
+        ModelConfigData config = new ModelConfigData(
+                "1", "key", "https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V3",
+                0.7, 2048, "SILICONFLOW", null);
+        ModelInvoker created = factory.createInvoker(config);
+
+        assertTrue(created instanceof SiliconFlowInvoker);
+    }
+
+    @Test
+    void factoryFallsBackToSiliconFlowInvokerForResponsesRequestType() {
+        DefaultModelInvokerFactory factory = new DefaultModelInvokerFactory(
+                RestClient.builder(), WebClient.builder());
+
+        ModelConfigData config = new ModelConfigData(
+                "1", "key", "https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V3",
+                0.7, 2048, "SILICONFLOW", RequestType.RESPONSES.getCode());
+        ModelInvoker created = factory.createInvoker(config);
+
+        assertTrue(created instanceof SiliconFlowInvoker);
+    }
+
+    @Test
+    void platformTypeSiliconFlowDefaults() {
+        assertEquals("SILICONFLOW", PlatformType.SILICONFLOW.getCode());
+        assertEquals("硅基流动", PlatformType.SILICONFLOW.getDescription());
+        assertEquals("https://api.siliconflow.cn/v1", PlatformType.SILICONFLOW.getDefaultBaseUrl());
+        assertTrue(PlatformType.SILICONFLOW.getDefaultModelNames().isEmpty());
+    }
+}

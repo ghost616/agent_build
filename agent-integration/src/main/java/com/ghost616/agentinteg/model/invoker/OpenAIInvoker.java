@@ -22,6 +22,7 @@ import com.ghost616.agentbase.dto.model.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatResponse;
 import com.ghost616.agentbase.dto.model.EmbeddingRequest;
 import com.ghost616.agentbase.dto.model.EmbeddingResponse;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolCallDelta;
@@ -292,7 +293,12 @@ public class OpenAIInvoker implements ModelInvoker {
         for (Message msg : messages) {
             Map<String, Object> m = new HashMap<>();
             m.put("role", msg.getRole());
-            m.put("content", msg.getContent());
+            if ("user".equals(msg.getRole())
+                    && msg.getImages() != null && !msg.getImages().isEmpty()) {
+                m.put("content", buildImageContentParts(msg.getContent(), msg.getImages()));
+            } else {
+                m.put("content", msg.getContent());
+            }
             if ("assistant".equals(msg.getRole()) && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
                 List<Map<String, Object>> toolCalls = new ArrayList<>();
                 for (ToolCall tc : msg.getToolCalls()) {
@@ -321,6 +327,31 @@ public class OpenAIInvoker implements ModelInvoker {
             result.add(m);
         }
         return result;
+    }
+
+    /**
+     * 构建 OpenAI 兼容的多模态 content 数组：text 块 + 多个 image_url 块。
+     * 图片的 imgId 仅供前端关联，不传给模型。
+     */
+    protected List<Map<String, Object>> buildImageContentParts(String text,
+            List<ImageContent> images) {
+        List<Map<String, Object>> content = new ArrayList<>();
+        Map<String, Object> textBlock = new HashMap<>();
+        textBlock.put("type", "text");
+        textBlock.put("text", text != null ? text : "");
+        content.add(textBlock);
+        for (ImageContent img : images) {
+            if (img.getImgText() == null || img.getImgText().isEmpty()) {
+                continue;
+            }
+            Map<String, Object> imageBlock = new HashMap<>();
+            imageBlock.put("type", "image_url");
+            Map<String, Object> imageUrl = new HashMap<>();
+            imageUrl.put("url", img.getImgText());
+            imageBlock.put("image_url", imageUrl);
+            content.add(imageBlock);
+        }
+        return content;
     }
 
     protected List<Map<String, Object>> buildTools(List<ToolDefinition> tools) {

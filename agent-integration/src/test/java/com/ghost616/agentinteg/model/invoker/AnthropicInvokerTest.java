@@ -3,6 +3,8 @@ package com.ghost616.agentinteg.model.invoker;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ghost616.agentbase.dto.model.ChatChunk;
+import com.ghost616.agentbase.dto.model.ImageContent;
+import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.UsageInfo;
 import com.ghost616.agentbase.enums.FinishReason;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +19,9 @@ import reactor.test.StepVerifier;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -182,6 +187,88 @@ class AnthropicInvokerTest {
         Method method = AnthropicInvoker.class.getDeclaredMethod("mapStopReason", String.class);
         method.setAccessible(true);
         return (FinishReason) method.invoke(invoker, stopReason);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> buildAnthropicMessages(List<Message> messages) throws Exception {
+        Method method = AnthropicInvoker.class.getDeclaredMethod("buildAnthropicMessages",
+                List.class, Map.class);
+        method.setAccessible(true);
+        return (List<Map<String, Object>>) method.invoke(invoker, messages, new HashMap<>());
+    }
+
+    @Test
+    void buildAnthropicMessagesUserWithImagesAppendsImageBlocks() throws Exception {
+        List<Message> messages = new ArrayList<>();
+        messages.add(Message.builder()
+                .role("user")
+                .content("describe the image")
+                .images(List.of(
+                        ImageContent.builder().imgId("img-1")
+                                .imgText("data:image/png;base64,AAA").build(),
+                        ImageContent.builder().imgId("img-2")
+                                .imgText("data:image/jpeg;base64,BBB").build()))
+                .build());
+
+        List<Map<String, Object>> result = buildAnthropicMessages(messages);
+
+        assertEquals(1, result.size());
+        Map<String, Object> userMsg = result.get(0);
+        assertEquals("user", userMsg.get("role"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content = (List<Map<String, Object>>) userMsg.get("content");
+        assertEquals(3, content.size());
+        Map<String, Object> textBlock = content.get(0);
+        assertEquals("text", textBlock.get("type"));
+        assertEquals("describe the image", textBlock.get("text"));
+        Map<String, Object> img1 = content.get(1);
+        assertEquals("image", img1.get("type"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> src1 = (Map<String, Object>) img1.get("source");
+        assertEquals("base64", src1.get("type"));
+        assertEquals("image/png", src1.get("media_type"));
+        assertEquals("AAA", src1.get("data"));
+        Map<String, Object> img2 = content.get(2);
+        assertEquals("image", img2.get("type"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> src2 = (Map<String, Object>) img2.get("source");
+        assertEquals("image/jpeg", src2.get("media_type"));
+        assertEquals("BBB", src2.get("data"));
+    }
+
+    @Test
+    void buildAnthropicMessagesUserWithoutImagesOnlyTextBlock() throws Exception {
+        List<Message> messages = new ArrayList<>();
+        messages.add(Message.builder().role("user").content("hi").build());
+
+        List<Map<String, Object>> result = buildAnthropicMessages(messages);
+
+        assertEquals(1, result.size());
+        Map<String, Object> userMsg = result.get(0);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content = (List<Map<String, Object>>) userMsg.get("content");
+        assertEquals(1, content.size());
+        assertEquals("text", content.get(0).get("type"));
+        assertEquals("hi", content.get(0).get("text"));
+    }
+
+    @Test
+    void buildAnthropicMessagesUserWithEmptyImagesOnlyTextBlock() throws Exception {
+        List<Message> messages = new ArrayList<>();
+        messages.add(Message.builder()
+                .role("user")
+                .content("hi")
+                .images(List.of())
+                .build());
+
+        List<Map<String, Object>> result = buildAnthropicMessages(messages);
+
+        assertEquals(1, result.size());
+        Map<String, Object> userMsg = result.get(0);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content = (List<Map<String, Object>>) userMsg.get("content");
+        assertEquals(1, content.size());
+        assertEquals("text", content.get(0).get("type"));
     }
 
     @Test

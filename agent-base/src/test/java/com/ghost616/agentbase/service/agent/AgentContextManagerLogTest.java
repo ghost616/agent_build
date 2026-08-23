@@ -180,9 +180,9 @@ class AgentContextManagerLogTest {
                 new ToolManager.ToolSessionObject(tool, null, null, List.of(), List.of())));
         when(sessionManager.getMessages(sessionId)).thenReturn(List.of(
                 new MessageDataProvider.MessageDTO("1", sessionId, "user", "hello", null, null,
-                        LocalDateTime.now(), null, null, null, null, null, null, null),
+                        LocalDateTime.now(), null, null, null, null, null, null, null, null),
                 new MessageDataProvider.MessageDTO("2", sessionId, "assistant", "hi", null, null,
-                        LocalDateTime.now(), null, null, null, null, null, null, null)));
+                        LocalDateTime.now(), null, null, null, null, null, null, null, null)));
 
         // 懒构建：build 仅轻量构建，访问 context() 触发完整构建并记录 CONTEXT_BUILD 日志
         agentContextManager.build(sessionId).build().context();
@@ -518,7 +518,7 @@ class AgentContextManagerLogTest {
 
         HistoryMessage message = new HistoryMessage(sessionId,
                 new AgentExecutionContext.HistoryEntry("user", "hello", null, null,
-                        LocalDateTime.now(), List.of(), null, null, null));
+                        LocalDateTime.now(), List.of(), null, null, null, null));
         agentContextManager.handleHistoryMessage(message);
 
         ArgumentCaptor<LogData> captor = ArgumentCaptor.forClass(LogData.class);

@@ -54,5 +54,7 @@
   "agent-integration/src/main/java/com/ghost616/agentinteg/tool/SendResultToParentTool.java": "293fd0c158b9577107c331184cc0d89b",
   "agent-integration/src/test/java/com/ghost616/agentinteg/tool/SendResultToParentToolTest.java": "fb4614eac73ffd4c7967d9df2c939eb0",
   "agent-integration/src/main/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHook.java": "a0c073029b451fd6351405114d4fa37d",
-  "agent-integration/src/test/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHookTest.java": "ca810a4f4e28e1febb8e93915665a084"
+  "agent-integration/src/test/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHookTest.java": "ca810a4f4e28e1febb8e93915665a084",
+  "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/AnthropicInvokerTest.java": "2633c02534e2524fb0e4d2778d89833b",
+  "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/KimiInvokerTest.java": "b5d6e299a1f16ba16e10b4a9da0c04a5"
 }

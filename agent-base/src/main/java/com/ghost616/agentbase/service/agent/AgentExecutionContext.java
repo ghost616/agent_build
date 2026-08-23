@@ -1,6 +1,7 @@
 package com.ghost616.agentbase.service.agent;
 
 import com.ghost616.agentbase.dto.model.CustomToolCall;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolInfo;
 import com.ghost616.agentbase.dto.model.UsageInfo;
@@ -111,7 +112,21 @@ public class AgentExecutionContext {
     }
 
     public void sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking) {
-        mutator.sendUserMessage(childSessionId, content, modelId, thinking);
+        sendUserMessage(childSessionId, content, modelId, thinking, null);
+    }
+
+    /**
+     * 向子会话发送用户消息（支持图片对象数组）。
+     *
+     * @param childSessionId 子会话 ID
+     * @param content        用户消息内容
+     * @param modelId        模型 ID（可为 null）
+     * @param thinking       是否启用思考模式（可为 null）
+     * @param images         图片列表（可为 null/空，imgId 仅供前端关联，不传给模型）
+     */
+    public void sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking,
+                                List<ImageContent> images) {
+        mutator.sendUserMessage(childSessionId, content, modelId, thinking, images);
     }
 
     /**
@@ -211,7 +226,7 @@ public class AgentExecutionContext {
     public record HistoryEntry(String role, String content, String reasoning, ToolInfo toolInfo,
                                LocalDateTime createTime, List<ToolCall> toolCalls,
                                UsageInfo usage, List<WebSearchCall> webSearchCall,
-                               List<CustomToolCall> customToolCall) {
+                               List<CustomToolCall> customToolCall, List<ImageContent> images) {
     }
 
     public static class AgentContextMutator {
@@ -238,7 +253,8 @@ public class AgentExecutionContext {
 
         @FunctionalInterface
         public interface SendUserMessageCallback {
-            void send(String childSessionId, String content, String modelId, Boolean thinking);
+            void send(String childSessionId, String content, String modelId, Boolean thinking,
+                      List<ImageContent> images);
         }
 
         @FunctionalInterface
@@ -410,12 +426,27 @@ public class AgentExecutionContext {
             return childSessionId;
         }
 
-    public void sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking) {
+        public void sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking) {
+            sendUserMessage(childSessionId, content, modelId, thinking, null);
+        }
+
+        /**
+         * 向子会话发送用户消息（支持图片对象数组）。
+         * 先调用 sendUserMessageCallback 回调（可为 null），再发送 ChildMessageEvent 事件（messageSender 非 null 时）。
+         *
+         * @param childSessionId 子会话 ID
+         * @param content        用户消息内容
+         * @param modelId        模型 ID（可为 null）
+         * @param thinking       是否启用思考模式（可为 null）
+         * @param images         图片列表（可为 null/空，imgId 仅供前端关联，不传给模型）
+         */
+        public void sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking,
+                                    List<ImageContent> images) {
             if (sendUserMessageCallback != null) {
-                sendUserMessageCallback.send(childSessionId, content, modelId, thinking);
+                sendUserMessageCallback.send(childSessionId, content, modelId, thinking, images);
             }
             if (messageSender != null) {
-                messageSender.send(new ChildMessageEvent(childSessionId, childSessionId, content, modelId, thinking));
+                messageSender.send(new ChildMessageEvent(childSessionId, childSessionId, content, modelId, thinking, images));
             }
         }
 

@@ -1,0 +1,18 @@
+{
+  "plan_id": "plan_9bfbce1c-b74e-45af-94bd-a060765f1581",
+  "module_name": "agent-integration",
+  "development_plan": "支持大模型图像理解——各平台 ModelInvoker 多图构建。任务：1) OpenAIInvoker.buildMessages 支持多图：user 消息存在 images 时 content 改为数组，含 text 块（原 content）与多个 image_url 块（每个 ImageContent 的 imgText 作为 image_url.url，imgId 不传出）；2) OpenAIResponsesInvoker.buildInput 支持多图：user 消息存在 images 时 content 改为数组，含 input_text 块与多个 input_image 块（imgText 作为 image_url）；3) AnthropicInvoker.buildAnthropicMessages 支持多图：user 消息存在 images 时在 content 块数组追加多个 image 块（按 Anthropic 图片协议用 imgText）；4) OllamaInvoker.buildRequestBody 支持多图：user 消息存在 images 时消息添加 images 数组字段（imgText 列表）；5) 同步更新受影响单元测试（OpenAIResponsesInvokerTest、AnthropicInvokerTest、SiliconFlowInvokerTest、KimiInvokerTest 等）。images 为 null/空时保持现有行为不变。",
+  "session_id": "cc7debd8-e150-4c9c-a559-332dda824bd6",
+  "modified_files": [
+    "agent-integration/src/main/java/com/ghost616/agentinteg/model/invoker/OpenAIInvoker.java",
+    "agent-integration/src/main/java/com/ghost616/agentinteg/model/invoker/OpenAIResponsesInvoker.java",
+    "agent-integration/src/main/java/com/ghost616/agentinteg/model/invoker/AnthropicInvoker.java",
+    "agent-integration/src/main/java/com/ghost616/agentinteg/model/invoker/OllamaInvoker.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/OpenAIInvokerTest.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/OpenAIResponsesInvokerTest.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/AnthropicInvokerTest.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/SiliconFlowInvokerTest.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/KimiInvokerTest.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/OllamaInvokerTest.java"
+  ]
+}

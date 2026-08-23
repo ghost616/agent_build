@@ -19,6 +19,7 @@ import com.ghost616.agentbase.dto.model.ChatChunk;
 import com.ghost616.agentbase.dto.model.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatResponse;
 import com.ghost616.agentbase.dto.model.CustomToolCall;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolCallDelta;
@@ -225,7 +226,10 @@ public class OpenAIResponsesInvoker implements ModelInvoker {
             }
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("role", msg.getRole());
-            if ("assistant".equals(msg.getRole())
+            if ("user".equals(msg.getRole())
+                    && msg.getImages() != null && !msg.getImages().isEmpty()) {
+                m.put("content", buildInputImageParts(msg.getContent(), msg.getImages()));
+            } else if ("assistant".equals(msg.getRole())
                     && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
                 List<Object> parts = new ArrayList<>();
                 if (msg.getContent() != null && !msg.getContent().isEmpty()) {
@@ -249,6 +253,28 @@ public class OpenAIResponsesInvoker implements ModelInvoker {
             result.add(m);
         }
         return result;
+    }
+
+    /**
+     * 构建 Responses API 的多模态 content 数组：input_text 块 + 多个 input_image 块。
+     * 图片的 imgId 仅供前端关联，不传给模型。
+     */
+    protected List<Object> buildInputImageParts(String text, List<ImageContent> images) {
+        List<Object> parts = new ArrayList<>();
+        Map<String, Object> textPart = new LinkedHashMap<>();
+        textPart.put("type", "input_text");
+        textPart.put("text", text != null ? text : "");
+        parts.add(textPart);
+        for (ImageContent img : images) {
+            if (img.getImgText() == null || img.getImgText().isEmpty()) {
+                continue;
+            }
+            Map<String, Object> imagePart = new LinkedHashMap<>();
+            imagePart.put("type", "input_image");
+            imagePart.put("image_url", img.getImgText());
+            parts.add(imagePart);
+        }
+        return parts;
     }
 
     protected List<Map<String, Object>> buildBuiltinTools(ChatRequest request) {

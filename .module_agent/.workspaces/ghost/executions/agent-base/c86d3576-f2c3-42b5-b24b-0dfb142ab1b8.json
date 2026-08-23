@@ -1,0 +1,43 @@
+[
+  {
+    "plan_id": "plan_f9ecc0b2-ed89-4665-a14d-0c3b80e171fa",
+    "plan": "支持大模型图像理解——图片对象数组（imgId+imgText）基础能力",
+    "modified_files": [
+      "agent-base/src/main/java/com/ghost616/agentbase/dto/model/ImageContent.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/dto/chat/ChatRequest.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/dto/model/Message.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentExecutionContext.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ChatService.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/SessionManager.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/MessageDataProvider.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentMessageProxy.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ToolExecutionService.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/MessageSavePostHook.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/sendmessage/ChildMessageEvent.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceResponsesTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceHistoryGroupJsonTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceLogTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceFilteringTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceNoLoadSkillsTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/AgentContextManagerTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/AgentContextManagerLogTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/SessionManagerTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/AgentMessageProxyTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/log/HandleMessageLogDataTest.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHookTest.java",
+      "platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultMessageDataProvider.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultMessageDataProviderTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/agent/AgentExecutionContextTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/agent/ChatServiceTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/controller/AgentContextControllerTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/controller/EvaluationSessionControllerTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/evaluation/EvaluationExecutionServiceTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/evaluation/EvaluationResultGenerateServiceTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultContextDataProviderTest.java"
+    ],
+    "summary": "执行总结：本轮实现大模型图像理解基础能力（图片对象数组 imgId+imgText）全链路透传。共修改/新建 34 个文件：\n【agent-base 主代码 12 个】新建 dto/model/ImageContent.java（imgId 仅供前端关联不传给模型、imgText 图片内容文本）；dto/chat/ChatRequest 新增 List<ImageContent> images 请求级图片（控制器暂不暴露）；dto/model/Message 新增 images 消息级图片；AgentExecutionContext.HistoryEntry record 末位新增 images，AgentExecutionContext/AgentContextMutator.sendUserMessage 保留 4 参旧签名并新增 5 参重载（含 images），SendUserMessageCallback.send 签名新增 images 参数；ChildMessageEvent 新增 images 字段；ChatService.chat() 入口将请求级 images 附加到本次 user 消息（messageSave().images() + HistoryEntry），buildMessageFromEntry 非空透传 images，历史折叠（filterAndFold/foldMessageGroups）仅保留 content 文本忽略图片（折叠区首条 user 消息改为仅含 role+content 副本）；SessionManager.MessageSaveBuilder 新增 images 链式方法；MessageDataProvider.saveMessage 接口与 MessageDTO record 新增 images；AgentContextManager.sendUserMessage 私有方法新增 images 参数（messageSave+HistoryEntry），sendUserMessageCallback lambda 适配 5 参，convertMessagesToHistory 透传 msg.images()，sendParentMessage images 传 null；AgentMessageProxy.sendUserMessage/sendUserMessageToSession 新增 5 参重载透传 ChatRequest.images；ToolExecutionService/MessageSavePostHook HistoryEntry 补 null images。\n【platform-app 主代码 1 个】DefaultMessageDataProvider 适配 saveMessage 签名并将 images 持久化到 message_image 表（MessageImageMapper 逐条插入、toMessageDTOs 回填 MessageDTO.images、rollback 同步删除）。\n【测试 21 个】agent-base 11 个（ChatServiceTest 新增 5 用例、AgentMessageProxyTest 新增 3 用例、SessionManagerTest 新增 1 用例，及 ChatServiceResponsesTest/ChatServiceHistoryGroupJsonTest/ChatServiceLogTest/AgentContextManagerTest/AgentContextManagerLogTest/HandleMessageLogDataTest 构造参数适配）、agent-integration 1 个（SubSessionResultFallbackHookTest）、platform-app 9 个（DefaultMessageDataProviderTest 新增 4 用例、AgentContextControllerTest/EvaluationSessionControllerTest/EvaluationExecutionServiceTest/EvaluationResultGenerateServiceTest/DefaultContextDataProviderTest/AgentExecutionContextTest 构造适配）。另由离朱最小化修复 5 个测试文件 MessageSaveBuilder mock stub（ChatServiceLogTest/ChatServiceResponsesTest/ChatServiceFilteringTest/ChatServiceNoLoadSkillsTest/platform-app ChatServiceTest），其中 ChatServiceFilteringTest/ChatServiceNoLoadSkillsTest 补充登记进模块定义（原为历史遗漏）。\n模块元数据：current_spec 新增「图像理解支持」章节，module_definition 新增 3 个文件（ImageContent/ChatServiceFilteringTest/ChatServiceNoLoadSkillsTest）并更新 11 个文件说明，change_history 追加 2 条记录。\n测试总结：全部相关测试通过——编译检查三模块（agent-base/agent-integration/platform-app）clean test-compile BUILD SUCCESS；agent-base 全量 536/536 通过（passed 536, failed 0, skipped 0）；agent-integration 全量 212/212 通过；platform-app 本次变更相关用例 206/206 通过（全量 1173/1176，3 个失败均为既有/环境问题且文件未在本次变更中修改：ToolDetailDTOTest 断言缺陷 expected 应为 String \"1\"、DefaultChatDataCacheProviderTest 时间敏感断言毫秒抖动 400 vs 397/335、SessionMemoryServiceTest 既有状态断言，建议作为独立技术债处理）。接口测试/E2E 不适用（无新增 HTTP 端点、无前端变更）。",
+    "errors": []
+  }
+]

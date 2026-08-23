@@ -1,0 +1,20 @@
+[
+  {
+    "plan_id": "plan_9bfbce1c-b74e-45af-94bd-a060765f1581",
+    "plan": "各平台 ModelInvoker 多图构建支持",
+    "modified_files": [
+      "agent-integration/src/main/java/com/ghost616/agentinteg/model/invoker/OpenAIInvoker.java",
+      "agent-integration/src/main/java/com/ghost616/agentinteg/model/invoker/OpenAIResponsesInvoker.java",
+      "agent-integration/src/main/java/com/ghost616/agentinteg/model/invoker/AnthropicInvoker.java",
+      "agent-integration/src/main/java/com/ghost616/agentinteg/model/invoker/OllamaInvoker.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/OpenAIInvokerTest.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/OpenAIResponsesInvokerTest.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/AnthropicInvokerTest.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/SiliconFlowInvokerTest.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/KimiInvokerTest.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/OllamaInvokerTest.java"
+    ],
+    "summary": "执行总结：本轮共修改 10 个文件——4 个主文件：OpenAIInvoker.buildMessages 多图 content 数组（text 块 + image_url 块，imgId 不传出，新增 buildImageContentParts）；OpenAIResponsesInvoker.buildInput 多图 content 数组（input_text 块 + input_image 块，新增 buildInputImageParts）；AnthropicInvoker.buildAnthropicMessages 追加 image 块（按 Anthropic 图片协议 source={type=base64,media_type,data}，data URI 解析 media_type 与 base64、纯 base64 默认 image/png，新增 buildAnthropicImageBlock）；OllamaInvoker.buildRequestBody 消息增加 images 字符串数组字段。images 为 null/空时全部保持原行为（content 纯字符串/仅 text 块/无 images 字段）。6 个测试文件同步更新共新增 16 个用例（OpenAIInvokerTest 3、OpenAIResponsesInvokerTest 3、AnthropicInvokerTest 3、OllamaInvokerTest 3、KimiInvokerTest 2、SiliconFlowInvokerTest 2），覆盖多图构建、imgId 不传出、images null/空回归。所有子类（Kimi/VolcEngine/DeepSeek/Azure/Custom/SiliconFlow 及 Responses 子类）经 super 调用自动继承多图支持，无需改动。\n\n测试总结：全部测试通过，通过 764 项，失败 0 项，跳过 0 项。测试环境 Windows 11 / JDK 21.0.11 / Maven 3.9.16（项目 target Java 17），命令 mvn -pl agent-integration -am test -Dstyle.color=never。agent-base 回归 536/536 通过，agent-integration 228/228 通过（含新增 16 个多图用例与全部既有回归用例），Maven Reactor BUILD SUCCESS 退出码 0。重点验证项全部通过：四平台多图 content 结构与协议一致、imgText null/空跳过图片块、images null/空行为与改动前一致、imgId 不进入请求体。首次执行 -Dstyle.color=never 未加引号被 PowerShell 拆分为两个参数导致 Maven 报 Unknown lifecycle phase，加引号后重跑成功，属命令行参数解析问题而非环境/代码问题。无失败用例，无需修复。",
+    "errors": []
+  }
+]

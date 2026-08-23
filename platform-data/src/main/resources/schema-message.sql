@@ -44,3 +44,11 @@ CREATE TABLE IF NOT EXISTS message_tool_call (
 );
 CREATE INDEX IF NOT EXISTS idx_message_tool_call_message_id ON message_tool_call(message_id);
 CREATE INDEX IF NOT EXISTS idx_message_tool_call_tool_call_id ON message_tool_call(tool_call_id);
+
+CREATE TABLE IF NOT EXISTS message_image (
+    id           BIGINT PRIMARY KEY,
+    message_id   BIGINT,
+    img_id       VARCHAR(255),
+    img_text     MEDIUMTEXT
+);
+CREATE INDEX IF NOT EXISTS idx_message_image_message_id ON message_image(message_id);

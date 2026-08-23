@@ -80,7 +80,7 @@ class EvaluationResultGenerateServiceTest {
     private MessageDataProvider.MessageDTO createMessage(String role, String content) {
         return new MessageDataProvider.MessageDTO(
                 "1", "sessionId", role, content,
-                null, null, null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null
         );
     }
 
@@ -88,7 +88,7 @@ class EvaluationResultGenerateServiceTest {
                                                                        List<MessageDataProvider.ToolCallData> toolCalls) {
         return new MessageDataProvider.MessageDTO(
                 "1", "sessionId", role, content,
-                null, null, null, null, toolCalls, null, null, null, null, null
+                null, null, null, null, toolCalls, null, null, null, null, null, null
         );
     }
 
@@ -96,7 +96,7 @@ class EvaluationResultGenerateServiceTest {
                                                                         String toolResult) {
         return new MessageDataProvider.MessageDTO(
                 "1", "sessionId", role, content,
-                null, null, null, toolResult, null, null, null, null, null, null
+                null, null, null, toolResult, null, null, null, null, null, null, null
         );
     }
 
@@ -105,7 +105,7 @@ class EvaluationResultGenerateServiceTest {
                                                                                 String toolResult) {
         return new MessageDataProvider.MessageDTO(
                 "1", "sessionId", role, content,
-                null, null, null, toolResult, toolCalls, null, null, null, null, null
+                null, null, null, toolResult, toolCalls, null, null, null, null, null, null
         );
     }
 

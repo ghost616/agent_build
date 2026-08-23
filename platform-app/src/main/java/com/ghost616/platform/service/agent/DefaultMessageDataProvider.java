@@ -1,6 +1,7 @@
 package com.ghost616.platform.service.agent;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.ToolInfo;
 import com.ghost616.agentbase.dto.model.UsageInfo;
 import com.ghost616.platform.enums.ErrorCode;
@@ -13,8 +14,10 @@ import com.ghost616.agentbase.service.agent.MessageDataProvider.ToolCallData;
 import com.ghost616.agentbase.service.agent.MessageDataProvider.WebSearchCallData;
 import com.ghost616.agentbase.util.JsonMapper;
 import com.ghost616.platform.entity.Message;
+import com.ghost616.platform.entity.MessageImage;
 import com.ghost616.platform.entity.MessageToolCall;
 import com.ghost616.platform.entity.Session;
+import com.ghost616.platform.repository.MessageImageMapper;
 import com.ghost616.platform.repository.MessageMapper;
 import com.ghost616.platform.repository.MessageToolCallMapper;
 import com.ghost616.platform.repository.SessionMapper;
@@ -44,6 +47,7 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
     private final MessageToolCallMapper messageToolCallMapper;
     private final MessageToolCallService messageToolCallService;
     private final SessionMapper sessionMapper;
+    private final MessageImageMapper messageImageMapper;
 
     private static final class MemoryPointCacheEntry {
         private final Integer memoryPointSequenceNum;
@@ -63,7 +67,7 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
     public String saveMessage(String sessionId, String role, String content, String reasoning,
                                ToolInfo toolInfo, String toolResult, List<ToolCallData> toolCalls,
                                UsageInfo usage, List<WebSearchCallData> webSearchCall, List<CustomToolCallData> customToolCall,
-                               String conversationId) {
+                               String conversationId, List<ImageContent> images) {
         Long sid = IdConverter.parse(sessionId);
         Message message = new Message();
         message.setSessionId(sid);
@@ -154,6 +158,16 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
             messageToolCallService.saveBatch(batchToolCalls);
         }
 
+        if (images != null && !images.isEmpty()) {
+            for (ImageContent img : images) {
+                MessageImage messageImage = new MessageImage();
+                messageImage.setMessageId(messageId);
+                messageImage.setImgId(img.getImgId());
+                messageImage.setImgText(img.getImgText());
+                messageImageMapper.insert(messageImage);
+            }
+        }
+
         return IdConverter.toString(messageId);
     }
 
@@ -241,11 +255,26 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
                     log.warn("反序列化 tokenUsage 失败", e);
                 }
             }
+
+            List<ImageContent> images = null;
+            LambdaQueryWrapper<MessageImage> imgWrapper = new LambdaQueryWrapper<>();
+            imgWrapper.eq(MessageImage::getMessageId, msg.getId());
+            List<MessageImage> imageRows = messageImageMapper.selectList(imgWrapper);
+            if (imageRows != null && !imageRows.isEmpty()) {
+                images = imageRows.stream()
+                        .map(mi -> ImageContent.builder()
+                                .imgId(mi.getImgId())
+                                .imgText(mi.getImgText())
+                                .build())
+                        .collect(Collectors.toList());
+            }
+
             result.add(new MessageDTO(
                     IdConverter.toString(msg.getId()), IdConverter.toString(msg.getSessionId()), msg.getRole(), msg.getContent(),
                     msg.getReasoning(), buildToolInfo(msg, toolCalls),
                     msg.getCreateTime(), msg.getToolResult(), toolCallDataList, usageInfo,
-                    msg.getRollback(), webSearchCallDataList, customToolCallDataList, msg.getConversationId()));
+                    msg.getRollback(), webSearchCallDataList, customToolCallDataList, msg.getConversationId(),
+                    images));
         }
 
         return result;
@@ -292,6 +321,7 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
                 .webSearchCall(dto.webSearchCall())
                 .customToolCall(dto.customToolCall())
                 .conversationId(dto.conversationId())
+                .images(dto.images())
                 .build();
     }
 
@@ -322,6 +352,8 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
 
         if (!messageIds.isEmpty()) {
             messageToolCallMapper.deleteByMessageIds(messageIds);
+            messageImageMapper.delete(new LambdaQueryWrapper<MessageImage>()
+                    .in(MessageImage::getMessageId, messageIds));
         }
 
         return messageMapper.rollbackBySessionIdAndGeSequenceNum(sid, sequenceNum);

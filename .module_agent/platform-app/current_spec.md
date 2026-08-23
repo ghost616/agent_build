@@ -271,3 +271,8 @@ platform-app 模块包含以下功能：
   - knowledge_base：list 按 user_id 过滤；getById/update/delete/toggleStatus 属主校验；name 唯一性校验按 user_id 限定
   - knowledge_file：list 按 user_id 过滤；getById/create（含所属知识库属主校验）/update/delete/toggleStatus/getFileContent/updateFileContent 属主校验
   - memory：MemoryQueryProviderImpl.getMemories 将当前用户 userId 传入 SessionMemoryESClient 搜索按 userId 过滤（无上下文为 null 不追加）；getMessageSeqsByRole 在有用户上下文时按 Message.user_id eq 过滤；SessionController GET /api/sessions/{id}/memory 分页查询按当前登录用户 userId 过滤记忆文档
+## 消息图片映射持久化
+
+- 消息图片映射（message_image 表）持久化链路：DefaultMessageDataProvider.saveMessage 新增 images 参数（List<ImageContent>，imgId/imgText），消息插入后逐条写入 MessageImage（messageId/imgId/imgText，依赖 platform-data 的 MessageImage 实体与 MessageImageMapper，@DS("message") 路由消息数据源）
+- 读取链路：getMessages/toMessageDTOs 按 messageId 联查 message_image 表，组装 List<ImageContent> 填充 MessageDTO.images；API 层映射 toSessionMessageDTO/toSessionMessageDTOs 同步透传 images 至 SessionMessageDTO.images，SessionController.getMessages/getMessagesBySeqRange 与 ConversationController 返回链路均携带图片信息（imgId 仅供前端后续调用接口获取图片信息，Controller 层暂不新增图片接口）
+- 回滚清理：rollbackToLastUserMessage 软回滚时按回滚消息 ID 集合删除对应 message_image 映射记录，与 message_tool_call 清理同步执行

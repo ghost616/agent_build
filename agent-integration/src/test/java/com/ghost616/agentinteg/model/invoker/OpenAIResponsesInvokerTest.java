@@ -3,6 +3,7 @@ package com.ghost616.agentinteg.model.invoker;
 import com.ghost616.agentbase.dto.model.ChatChunk;
 import com.ghost616.agentbase.dto.model.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatResponse;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolCallDelta;
@@ -184,6 +185,69 @@ class OpenAIResponsesInvokerTest {
         Map<String, Object> body = invoker.buildRequestBody(request, false);
 
         assertFalse(body.containsKey("tools"));
+    }
+
+    @Test
+    void buildInputUserWithImagesBuildsInputTextAndImageParts() {
+        Message userMsg = Message.builder()
+                .role("user")
+                .content("describe the image")
+                .images(List.of(
+                        ImageContent.builder().imgId("img-1")
+                                .imgText("data:image/png;base64,AAA").build(),
+                        ImageContent.builder().imgId("img-2")
+                                .imgText("data:image/jpeg;base64,BBB").build()))
+                .build();
+
+        List<Object> input = invoker.buildInput(List.of(userMsg));
+
+        assertEquals(1, input.size());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> m = (Map<String, Object>) input.get(0);
+        assertEquals("user", m.get("role"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content = (List<Map<String, Object>>) m.get("content");
+        assertNotNull(content);
+        assertEquals(3, content.size());
+        Map<String, Object> textPart = content.get(0);
+        assertEquals("input_text", textPart.get("type"));
+        assertEquals("describe the image", textPart.get("text"));
+        Map<String, Object> img1 = content.get(1);
+        assertEquals("input_image", img1.get("type"));
+        assertEquals("data:image/png;base64,AAA", img1.get("image_url"));
+        assertFalse(img1.containsKey("img_id"));
+        Map<String, Object> img2 = content.get(2);
+        assertEquals("input_image", img2.get("type"));
+        assertEquals("data:image/jpeg;base64,BBB", img2.get("image_url"));
+        assertFalse(img2.containsKey("img_id"));
+    }
+
+    @Test
+    void buildInputUserWithoutImagesKeepsPlainContent() {
+        Message userMsg = Message.builder().role("user").content("hi").build();
+
+        List<Object> input = invoker.buildInput(List.of(userMsg));
+
+        assertEquals(1, input.size());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> m = (Map<String, Object>) input.get(0);
+        assertEquals("hi", m.get("content"));
+    }
+
+    @Test
+    void buildInputUserWithEmptyImagesKeepsPlainContent() {
+        Message userMsg = Message.builder()
+                .role("user")
+                .content("hi")
+                .images(List.of())
+                .build();
+
+        List<Object> input = invoker.buildInput(List.of(userMsg));
+
+        assertEquals(1, input.size());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> m = (Map<String, Object>) input.get(0);
+        assertEquals("hi", m.get("content"));
     }
 
     @Test

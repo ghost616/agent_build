@@ -3,6 +3,7 @@ package com.ghost616.agentbase.service.agent;
 import java.util.List;
 
 import com.ghost616.agentbase.core.AgentComponentRegistry;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.ToolInfo;
 import com.ghost616.agentbase.dto.model.UsageInfo;
 import com.ghost616.agentbase.enums.AgentErrorCode;
@@ -66,6 +67,7 @@ public class SessionManager {
         private List<MessageDataProvider.WebSearchCallData> webSearchCall;
         private List<MessageDataProvider.CustomToolCallData> customToolCall;
         private String conversationId;
+        private List<ImageContent> images;
 
         private MessageSaveBuilder() {
         }
@@ -125,6 +127,11 @@ public class SessionManager {
             return this;
         }
 
+        public MessageSaveBuilder images(List<ImageContent> images) {
+            this.images = images;
+            return this;
+        }
+
         public String save() {
             if (sessionId == null) {
                 addLog(SessionErrorLogData.builder()
@@ -156,7 +163,7 @@ public class SessionManager {
                 throw new AgentException(AgentErrorCode.PARAM_INVALID, "content 不能为空");
             }
             String messageId = dataProvider.saveMessage(sessionId, role, content, reasoning,
-                    toolInfo, toolResult, toolCalls, usage, webSearchCall, customToolCall, conversationId);
+                    toolInfo, toolResult, toolCalls, usage, webSearchCall, customToolCall, conversationId, images);
             addLog(MessageSaveLogData.builder()
                     .logLevel(LogLevel.INFO)
                     .sessionId(sessionId)

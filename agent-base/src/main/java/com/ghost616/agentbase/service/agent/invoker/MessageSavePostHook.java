@@ -136,7 +136,8 @@ public class MessageSavePostHook implements SystemPostHook {
                             historyToolCalls != null ? Collections.unmodifiableList(historyToolCalls) : Collections.emptyList(),
                             usage,
                             sb.webSearchCalls.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(sb.webSearchCalls),
-                            sb.customToolCalls.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(sb.customToolCalls)));
+                            sb.customToolCalls.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(sb.customToolCalls),
+                            null));
             return;
         }
 

@@ -163,12 +163,12 @@ class SubSessionResultFallbackHookTest {
     private AgentExecutionContext.HistoryEntry assistantMessage(String content) {
         return new AgentExecutionContext.HistoryEntry(
                 "assistant", content, null, null, LocalDateTime.now(),
-                List.of(), null, List.of(), List.of());
+                List.of(), null, List.of(), List.of(), null);
     }
 
     private AgentExecutionContext.HistoryEntry userMessage(String content) {
         return new AgentExecutionContext.HistoryEntry(
                 "user", content, null, null, LocalDateTime.now(),
-                List.of(), null, List.of(), List.of());
+                List.of(), null, List.of(), List.of(), null);
     }
 }

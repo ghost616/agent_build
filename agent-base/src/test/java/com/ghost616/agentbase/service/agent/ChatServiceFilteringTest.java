@@ -64,6 +64,7 @@ class ChatServiceFilteringTest {
         lenient().when(msgBuilder.sessionId(any())).thenReturn(msgBuilder);
         lenient().when(msgBuilder.role(any())).thenReturn(msgBuilder);
         lenient().when(msgBuilder.content(any())).thenReturn(msgBuilder);
+        lenient().when(msgBuilder.images(any())).thenReturn(msgBuilder);
         lenient().when(msgBuilder.conversationId(any())).thenReturn(msgBuilder);
         lenient().when(sessionManager.messageSave()).thenReturn(msgBuilder);
 

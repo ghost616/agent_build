@@ -76,6 +76,7 @@ class ChatServiceLogTest {
         lenient().when(msgBuilder.sessionId(any())).thenReturn(msgBuilder);
         lenient().when(msgBuilder.role(any())).thenReturn(msgBuilder);
         lenient().when(msgBuilder.content(any())).thenReturn(msgBuilder);
+        lenient().when(msgBuilder.images(any())).thenReturn(msgBuilder);
         lenient().when(msgBuilder.conversationId(any())).thenReturn(msgBuilder);
         lenient().when(sessionManager.messageSave()).thenReturn(msgBuilder);
 
@@ -271,14 +272,14 @@ class ChatServiceLogTest {
         for (int g = 0; g < 12; g++) {
             history.add(new AgentExecutionContext.HistoryEntry(
                     "user", "q" + g, null, null, LocalDateTime.now(),
-                    List.of(), null, null, null));
+                    List.of(), null, null, null, null));
             history.add(new AgentExecutionContext.HistoryEntry(
                     "assistant", "a" + g, null, null, LocalDateTime.now(),
-                    List.of(), null, null, null));
+                    List.of(), null, null, null, null));
         }
         history.add(new AgentExecutionContext.HistoryEntry(
                 "user", "hello", null, null, LocalDateTime.now(),
-                List.of(), null, null, null));
+                List.of(), null, null, null, null));
 
         Map<String, String> convVars = new HashMap<>();
         convVars.put(HistoryQuerySystemTool.VAR_NAME, "[2]");

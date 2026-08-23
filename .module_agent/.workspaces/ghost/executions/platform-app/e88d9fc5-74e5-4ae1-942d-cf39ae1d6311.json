@@ -1,0 +1,13 @@
+[
+  {
+    "plan_id": "plan_9326d298-27ac-4c72-80ab-ac56b6f5a79a",
+    "plan": "支持大模型图像理解——消息图片映射持久化实现（仅 service 层，不动 Controller）",
+    "modified_files": [
+      "platform-app/src/main/java/com/ghost616/platform/dto/session/SessionMessageDTO.java",
+      "platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultMessageDataProvider.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultMessageDataProviderTest.java"
+    ],
+    "summary": "执行总结：本轮完成消息图片映射持久化的 service 层补全。核查现状确认 DefaultMessageDataProvider 已实现 saveMessage 写入 MessageImage（images 参数，messageId/imgId/imgText）、getMessages/toMessageDTOs 联查 message_image 组装 MessageDTO.images、rollbackToLastUserMessage 软回滚清理 MessageImage 记录（依赖 platform-data 的 MessageImage 实体与 MessageImageMapper）；本次补齐 API 返回链路缺口：1) SessionMessageDTO 新增 images 字段（List<ImageContent>，含 imgId/imgText）；2) DefaultMessageDataProvider.toSessionMessageDTO 映射 dto.images() 透传至 SessionMessageDTO，使 SessionController.getMessages/getMessagesBySeqRange 与 ConversationController 返回链路携带图片信息；3) DefaultMessageDataProviderTest 更新：toSessionMessageDTOs_映射全部字段含sequenceNum 用例补充 images 断言、新增 toSessionMessageDTOs_无messageImage行_images为null 用例、rollbackToLastUserMessage_存在用户消息 用例补充 verify(messageImageMapper).delete 验证。修改文件 3 个：platform-app/src/main/java/com/ghost616/platform/dto/session/SessionMessageDTO.java、platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultMessageDataProvider.java、platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultMessageDataProviderTest.java。imgId 仅供前端后续调用接口获取图片信息，Controller 层未新增接口，符合\"仅 service 层\"约束。\n\n测试总结：全部测试通过。编译测试通过（mvn -B clean test -pl platform-app -am，5 个模块 BUILD SUCCESS，release 17）；单元测试 58 个用例全部通过（DefaultMessageDataProviderTest 51/51、MessageServiceImplTest 7/7），Failures 0、Errors 0、Skipped 0。接口测试与 E2E 测试因本任务仅 service 层、无 Controller/UI 变更而不适用。关键验证点：toSessionMessageDTO 透传 images（有行时 imgId/imgText 正确、无行时 null）、rollback 同步删除 message_image 映射、saveMessage 写入 MessageImage 行、getMessages 联查组装 MessageDTO.images 回归均通过。无环境问题，无需修复项。",
+    "errors": []
+  }
+]

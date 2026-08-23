@@ -1,6 +1,9 @@
 package com.ghost616.agentinteg.model.invoker;
 
 import com.ghost616.agentbase.dto.model.ChatChunk;
+import com.ghost616.agentbase.dto.model.ChatRequest;
+import com.ghost616.agentbase.dto.model.ImageContent;
+import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.enums.FinishReason;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +13,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -147,6 +152,72 @@ class OllamaInvokerTest {
         Method method = OllamaInvoker.class.getDeclaredMethod("mapDoneReason", String.class);
         method.setAccessible(true);
         return (FinishReason) method.invoke(invoker, doneReason);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> buildRequestBody(ChatRequest request, boolean stream) throws Exception {
+        Method method = OllamaInvoker.class.getDeclaredMethod("buildRequestBody",
+                ChatRequest.class, boolean.class);
+        method.setAccessible(true);
+        return (Map<String, Object>) method.invoke(invoker, request, stream);
+    }
+
+    @Test
+    void buildRequestBody_userWithImages_addsImagesField() throws Exception {
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(Message.builder()
+                        .role("user")
+                        .content("describe the image")
+                        .images(List.of(
+                                ImageContent.builder().imgId("img-1")
+                                        .imgText("data:image/png;base64,AAA").build(),
+                                ImageContent.builder().imgId("img-2")
+                                        .imgText("data:image/jpeg;base64,BBB").build()))
+                        .build()))
+                .build();
+
+        Map<String, Object> body = buildRequestBody(request, false);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) body.get("messages");
+        assertEquals(1, messages.size());
+        Map<String, Object> m = messages.get(0);
+        assertEquals("user", m.get("role"));
+        assertEquals("describe the image", m.get("content"));
+        assertEquals(List.of("data:image/png;base64,AAA", "data:image/jpeg;base64,BBB"),
+                m.get("images"));
+    }
+
+    @Test
+    void buildRequestBody_userWithoutImages_omitsImagesField() throws Exception {
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(Message.builder().role("user").content("hi").build()))
+                .build();
+
+        Map<String, Object> body = buildRequestBody(request, false);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) body.get("messages");
+        assertEquals(1, messages.size());
+        assertFalse(messages.get(0).containsKey("images"));
+    }
+
+    @Test
+    void buildRequestBody_userWithEmptyImages_omitsImagesField() throws Exception {
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(Message.builder()
+                        .role("user")
+                        .content("hi")
+                        .images(List.of())
+                        .build()))
+                .build();
+
+        Map<String, Object> body = buildRequestBody(request, false);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) body.get("messages");
+        assertEquals(1, messages.size());
+        assertFalse(messages.get(0).containsKey("images"));
     }
 
     @Test

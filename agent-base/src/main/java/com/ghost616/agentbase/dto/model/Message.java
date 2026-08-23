@@ -30,4 +30,7 @@ public class Message {
 
     /** 推理/思考内容（DeepSeek thinking 模式等） */
     private String reasoning;
+
+    /** 图片列表（消息级，图片对象数组；imgId 仅供前端关联，不传给模型） */
+    private List<ImageContent> images;
 }

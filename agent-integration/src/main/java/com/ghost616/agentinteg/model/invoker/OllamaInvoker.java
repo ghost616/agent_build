@@ -20,6 +20,7 @@ import reactor.core.publisher.Mono;
 import com.ghost616.agentbase.dto.model.ChatChunk;
 import com.ghost616.agentbase.dto.model.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatResponse;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolDefinition;
 import com.ghost616.agentbase.dto.model.UsageInfo;
@@ -178,6 +179,18 @@ public class OllamaInvoker implements ModelInvoker {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("role", msg.getRole());
             m.put("content", msg.getContent() != null ? msg.getContent() : "");
+            if ("user".equals(msg.getRole())
+                    && msg.getImages() != null && !msg.getImages().isEmpty()) {
+                List<String> images = new ArrayList<>();
+                for (ImageContent img : msg.getImages()) {
+                    if (img.getImgText() != null && !img.getImgText().isEmpty()) {
+                        images.add(img.getImgText());
+                    }
+                }
+                if (!images.isEmpty()) {
+                    m.put("images", images);
+                }
+            }
             messages.add(m);
         }
         body.put("messages", messages);

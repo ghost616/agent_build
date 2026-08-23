@@ -1,6 +1,8 @@
 package com.ghost616.agentinteg.model.invoker;
 
 import com.ghost616.agentbase.dto.model.EmbeddingRequest;
+import com.ghost616.agentbase.dto.model.ImageContent;
+import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ModelConfigData;
 import com.ghost616.agentbase.enums.RequestType;
 import com.ghost616.agentbase.service.model.invoker.ModelInvoker;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -37,6 +40,50 @@ class SiliconFlowInvokerTest {
     @Test
     void inheritsEmbeddingsUrlFromOpenAIInvoker() {
         assertEquals("https://api.siliconflow.cn/v1/embeddings", invoker.buildEmbeddingsUrl());
+    }
+
+    @Test
+    void inheritsMultiImageBuildMessagesFromOpenAIInvoker() {
+        Message userMsg = Message.builder()
+                .role("user")
+                .content("describe the image")
+                .images(List.of(
+                        ImageContent.builder().imgId("img-1")
+                                .imgText("data:image/png;base64,AAA").build(),
+                        ImageContent.builder().imgId("img-2")
+                                .imgText("data:image/jpeg;base64,BBB").build()))
+                .build();
+
+        List<Map<String, Object>> result = invoker.buildMessages(List.of(userMsg));
+
+        assertEquals(1, result.size());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content =
+                (List<Map<String, Object>>) result.get(0).get("content");
+        assertEquals(3, content.size());
+        assertEquals("text", content.get(0).get("type"));
+        Map<String, Object> img1 = content.get(1);
+        assertEquals("image_url", img1.get("type"));
+        assertEquals("data:image/png;base64,AAA",
+                ((Map<?, ?>) img1.get("image_url")).get("url"));
+        assertEquals("image_url", content.get(2).get("type"));
+    }
+
+    @Test
+    void inheritsMultiImageBuildMessagesOmitsImgId() {
+        Message userMsg = Message.builder()
+                .role("user")
+                .content("describe the image")
+                .images(List.of(ImageContent.builder().imgId("img-9")
+                        .imgText("data:image/png;base64,ZZZ").build()))
+                .build();
+
+        List<Map<String, Object>> result = invoker.buildMessages(List.of(userMsg));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> imgBlock =
+                ((List<Map<String, Object>>) result.get(0).get("content")).get(1);
+        assertFalse(((Map<?, ?>) imgBlock.get("image_url")).containsKey("img_id"));
     }
 
     @Test

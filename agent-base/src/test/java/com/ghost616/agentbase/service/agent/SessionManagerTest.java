@@ -77,7 +77,7 @@ class SessionManagerTest {
 
     @Test
     void save_参数均非null时正常调用dataProvider() {
-        when(dataProvider.saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null))
+        when(dataProvider.saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null, null))
                 .thenReturn("100");
 
         String result = sessionManager.messageSave()
@@ -87,7 +87,7 @@ class SessionManagerTest {
                 .save();
 
         assertEquals("100", result);
-        verify(dataProvider).saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null);
+        verify(dataProvider).saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null, null);
     }
 
     @Test
@@ -95,7 +95,7 @@ class SessionManagerTest {
         var toolCalls = java.util.List.of(
                 new MessageDataProvider.ToolCallData("tc1", "getWeather", "{}"));
         when(dataProvider.saveMessage("1", "assistant", "response", "thinking...",
-                new ToolInfo("tc1", "getWeather"), "result_ok", toolCalls, null, null, null, null)).thenReturn("200");
+                new ToolInfo("tc1", "getWeather"), "result_ok", toolCalls, null, null, null, null, null)).thenReturn("200");
 
         String result = sessionManager.messageSave()
                 .sessionId("1")
@@ -109,14 +109,32 @@ class SessionManagerTest {
 
         assertEquals("200", result);
         verify(dataProvider).saveMessage("1", "assistant", "response", "thinking...",
-                new ToolInfo("tc1", "getWeather"), "result_ok", toolCalls, null, null, null, null);
+                new ToolInfo("tc1", "getWeather"), "result_ok", toolCalls, null, null, null, null, null);
+    }
+
+    @Test
+    void save_带images_透传给dataProvider() {
+        var images = List.of(
+                com.ghost616.agentbase.dto.model.ImageContent.builder().imgId("img-1").imgText("data:image/png;base64,AAA").build());
+        when(dataProvider.saveMessage("1", "user", "看图", null, null, null, null, null, null, null, null, images))
+                .thenReturn("300");
+
+        String result = sessionManager.messageSave()
+                .sessionId("1")
+                .role("user")
+                .content("看图")
+                .images(images)
+                .save();
+
+        assertEquals("300", result);
+        verify(dataProvider).saveMessage("1", "user", "看图", null, null, null, null, null, null, null, null, images);
     }
 
     // ========== 智能体日志 ==========
 
     @Test
     void save成功时应记录MESSAGE_SAVE日志() {
-        when(dataProvider.saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null))
+        when(dataProvider.saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null, null))
                 .thenReturn("100");
 
         String result = sessionManager.messageSave()
@@ -145,7 +163,7 @@ class SessionManagerTest {
                 new MessageDataProvider.CustomToolCallData("i1", 0, "{}", "{}"));
         UsageInfo usage = new UsageInfo(1, 2, 3);
         when(dataProvider.saveMessage("1", "assistant", "response", "thinking...",
-                new ToolInfo("tc1", "getWeather"), "result_ok", toolCalls, usage, webSearchCalls, customToolCalls, "conv-1"))
+                new ToolInfo("tc1", "getWeather"), "result_ok", toolCalls, usage, webSearchCalls, customToolCalls, "conv-1", null))
                 .thenReturn("200");
 
         sessionManager.messageSave()
@@ -199,7 +217,7 @@ class SessionManagerTest {
     void getMessages应记录MESSAGE_QUERY日志() {
         when(dataProvider.getMessages("1")).thenReturn(List.of(
                 new MessageDataProvider.MessageDTO("m1", "1", "user", "hello", null, null,
-                        LocalDateTime.now(), null, null, null, null, null, null, null)));
+                        LocalDateTime.now(), null, null, null, null, null, null, null, null)));
 
         sessionManager.getMessages("1");
 
@@ -242,7 +260,7 @@ class SessionManagerTest {
     @Test
     void agentLog抛异常时不中断主流程() {
         doThrow(new RuntimeException("log failure")).when(agentLog).addLog(any());
-        when(dataProvider.saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null))
+        when(dataProvider.saveMessage("1", "user", "hello", null, null, null, null, null, null, null, null, null))
                 .thenReturn("100");
 
         String result = sessionManager.messageSave()

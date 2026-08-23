@@ -45,7 +45,10 @@ public class MessageSchemaMigration extends AbstractSchemaMigration implements A
                 new Migration("message_tool_call", "web_search_call", "TEXT", null),
                 new Migration("message_tool_call", "custom_tool_call", "TEXT", null),
                 new Migration("message", "user_id", "BIGINT", "1"),
-                new Migration("agent_log", "user_id", "BIGINT", "1")
+                new Migration("agent_log", "user_id", "BIGINT", "1"),
+                new Migration("message_image", "message_id", "BIGINT", null),
+                new Migration("message_image", "img_id", "VARCHAR(255)", null),
+                new Migration("message_image", "img_text", "MEDIUMTEXT", null)
         ));
 
         log.info("消息数据源 Schema 迁移完成");

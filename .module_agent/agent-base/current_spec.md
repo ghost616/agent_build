@@ -401,3 +401,15 @@ ChatService 新增 public static final String SEND_USER_MESSAGE_MARKER = "[send_
 ## 子会话打开方式
 
 SubSessionOpenMode 枚举（com.ghost616.agentbase.enums.SubSessionOpenMode），定义子会话的打开/推送方式，供 platform-data 的 AgentConfig 引用。包含 WEBSOCKET("WEBSOCKET", "WebSocket推送") 与 TOOL_CALL("TOOL_CALL", "前台工具调用") 两个值，code 字段使用 @EnumValue 标注（供 MyBatis-Plus 使用），提供 getCode()/getDescription() 方法。提供 DEFAULT 静态常量指向 TOOL_CALL，默认值语义为前台工具调用。
+## 图像理解支持
+
+大模型图像理解基础能力（图片对象数组 imgId+imgText 全链路透传）：
+
+- 新建 ImageContent DTO（com.ghost616.agentbase.dto.model.ImageContent）：字段 String imgId（图片 ID，仅供前端关联使用，不传给模型）+ String imgText（图片内容文本，如 base64 编码，传给模型用于图像理解），Lombok @Data/@Builder/@NoArgsConstructor/@AllArgsConstructor，含 Javadoc。
+- dto/chat/ChatRequest 新增 List<ImageContent> images 请求级图片列表（控制器暂不暴露）；dto/model/Message 新增 List<ImageContent> images 消息级图片列表；AgentExecutionContext.HistoryEntry record 末位新增 List<ImageContent> images 字段。
+- ChatService.chat() 入口将请求级 images 附加到本次构建的 user 消息：sessionManager.messageSave().images(images) 持久化 + HistoryEntry images 字段；buildMessageFromEntry 将 entry.images() 非空时透传到模型 Message；历史折叠（filterAndFold/foldMessageGroups）仅保留 content 文本忽略图片——折叠区首条 user 消息改为仅含 role+content 的副本（剥离图片），锚点 JSON 行（buildHistoryGroupMessage/toHistoryGroupJson）不含图片字段。
+- SessionManager.MessageSaveBuilder 新增 images(List<ImageContent>) 链式方法并在 save() 透传；MessageDataProvider.saveMessage 接口与 MessageDTO record 新增 List<ImageContent> images 参数/字段（images 为 null/空时保持既有行为）。platform-app DefaultMessageDataProvider 适配：saveMessage 将 images 逐条写入 message_image 表（MessageImageMapper），toMessageDTOs 按 messageId 加载回填 MessageDTO.images，rollback 时同步删除 message_image 行。
+- AgentExecutionContext/AgentContextMutator.sendUserMessage 支持图片对象数组：保留 4 参旧签名（委托 5 参，images=null），新增 5 参重载；SendUserMessageCallback.send 签名新增 List<ImageContent> images 参数；5 参实现将 images 透传回调并随 ChildMessageEvent 发送（ChildMessageEvent 新增 images 字段）。
+- AgentContextManager.sendUserMessage 私有方法新增 images 参数：messageSave().images(images) + HistoryEntry images；sendUserMessageCallback lambda 适配 5 参；convertMessagesToHistory 将 MessageDTO.images 透传 HistoryEntry；sendParentMessage 的 HistoryEntry images 传 null。
+- AgentMessageProxy.sendUserMessage/sendUserMessageToSession 新增 5 参重载（含 List<ImageContent> images），构建 dto/chat.ChatRequest 时透传 .images(images)；4 参旧签名保留并委托。
+- ToolExecutionService/MessageSavePostHook 构造 HistoryEntry 时 images 参数传 null（工具/助手消息无图片）。

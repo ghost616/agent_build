@@ -2,6 +2,7 @@ package com.ghost616.agentbase.service.agent;
 
 import com.ghost616.agentbase.dto.chat.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatChunk;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.enums.FinishReason;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,6 +107,60 @@ class AgentMessageProxyTest {
         assertEquals("assistant", result.getRole());
         assertEquals("Hello back", result.getContent());
         verify(toolExecutionService, never()).executeTool(any());
+    }
+
+    @Test
+    void sendUserMessage_带images时构建ChatRequest透传images() {
+        List<ImageContent> images = List.of(
+                ImageContent.builder().imgId("img-1").imgText("data:image/png;base64,AAA").build());
+        ServerSentEvent<ChatChunk> event = ServerSentEvent.<ChatChunk>builder()
+                .data(ChatChunk.builder().delta("ok").hasToolCalls(false).build())
+                .build();
+        when(chatService.chat(any())).thenReturn(Flux.just(event));
+
+        proxy.sendUserMessage(sessionId, "看图", modelId, true, images);
+
+        ArgumentCaptor<ChatRequest> captor = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(chatService).chat(captor.capture());
+        ChatRequest request = captor.getValue();
+        assertEquals(sessionId, request.getSessionId());
+        assertEquals("看图", request.getContent());
+        assertEquals(modelId, request.getModelId());
+        assertEquals(true, request.getThinking());
+        assertEquals(images, request.getImages());
+    }
+
+    @Test
+    void sendUserMessage_不带images时ChatRequest的images为null() {
+        ServerSentEvent<ChatChunk> event = ServerSentEvent.<ChatChunk>builder()
+                .data(ChatChunk.builder().delta("ok").hasToolCalls(false).build())
+                .build();
+        when(chatService.chat(any())).thenReturn(Flux.just(event));
+
+        proxy.sendUserMessage(sessionId, "Hi", modelId, null);
+
+        ArgumentCaptor<ChatRequest> captor = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(chatService).chat(captor.capture());
+        assertNull(captor.getValue().getImages());
+    }
+
+    @Test
+    void sendUserMessageToSession_带images时构建ChatRequest透传images() {
+        List<ImageContent> images = List.of(
+                ImageContent.builder().imgId("img-2").imgText("data:image/jpeg;base64,BBB").build());
+        ServerSentEvent<ChatChunk> event = ServerSentEvent.<ChatChunk>builder()
+                .data(ChatChunk.builder().delta("ok").hasToolCalls(false).build())
+                .build();
+        when(chatService.chat(any())).thenReturn(Flux.just(event));
+
+        proxy.sendUserMessageToSession(sessionId, "看图", modelId, null, images);
+
+        ArgumentCaptor<ChatRequest> captor = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(chatService).chat(captor.capture());
+        ChatRequest request = captor.getValue();
+        assertEquals(sessionId, request.getSessionId());
+        assertEquals(images, request.getImages());
+        assertNotNull(request.getConversationId(), "sendUserMessageToSession 应自动生成 conversationId");
     }
 
     @Test

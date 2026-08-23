@@ -58,7 +58,7 @@ class EvaluationSessionControllerTest {
     private MessageDataProvider.MessageDTO createUserMessage(String content, Boolean rollback) {
         return new MessageDataProvider.MessageDTO(
                 "1", String.valueOf(BENCHMARK_SESSION_ID), "user", content,
-                null, null, null, null, null, null, rollback, null, null, null
+                null, null, null, null, null, null, rollback, null, null, null, null
         );
     }
 

@@ -1,5 +1,6 @@
 package com.ghost616.platform.dto.session;
 
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.ToolInfo;
 import com.ghost616.agentbase.dto.model.UsageInfo;
 import com.ghost616.agentbase.service.agent.MessageDataProvider;
@@ -51,4 +52,6 @@ public class SessionMessageDTO {
     private List<MessageDataProvider.CustomToolCallData> customToolCall;
 
     private String conversationId;
+
+    private List<ImageContent> images;
 }

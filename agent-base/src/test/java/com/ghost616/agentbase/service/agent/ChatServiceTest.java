@@ -4,6 +4,7 @@ import com.ghost616.agentbase.core.AgentComponentRegistry;
 import com.ghost616.agentbase.core.ThreadVariableHandler;
 import com.ghost616.agentbase.core.ThreadVariableWrapper;
 import com.ghost616.agentbase.dto.chat.ChatRequest;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ModelConfigData;
 import com.ghost616.agentbase.dto.model.ToolCall;
@@ -226,14 +227,14 @@ class ChatServiceTest {
         for (int g = 0; g < groupCount - 1; g++) {
             history.add(new AgentExecutionContext.HistoryEntry(
                     "user", "q" + g, null, null, java.time.LocalDateTime.now(),
-                    List.of(), null, null, null));
+                    List.of(), null, null, null, null));
             history.add(new AgentExecutionContext.HistoryEntry(
                     "assistant", "a" + g, null, null, java.time.LocalDateTime.now(),
-                    List.of(), null, null, null));
+                    List.of(), null, null, null, null));
         }
         history.add(new AgentExecutionContext.HistoryEntry(
                 "user", "hello", null, null, java.time.LocalDateTime.now(),
-                List.of(), null, null, null));
+                List.of(), null, null, null, null));
         return history;
     }
 
@@ -324,29 +325,29 @@ class ChatServiceTest {
                 .build();
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "q0", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "user", "q0", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
-                "assistant", "a0", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "assistant", "a0", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "q1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "user", "q1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
-                "assistant", "a1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "assistant", "a1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "q2", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "user", "q2", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
                 "assistant", "调用工具", "reasoning_text", null, java.time.LocalDateTime.now(),
-                List.of(toolCall), null, null, null));
+                List.of(toolCall), null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
                 "tool", "{\"temp\":25}", null, new ToolInfo("tc1", "get_weather"), java.time.LocalDateTime.now(),
-                List.of(), null, null, null));
+                List.of(), null, null, null, null));
         for (int g = 3; g < 13; g++) {
             history.add(new AgentExecutionContext.HistoryEntry(
-                    "user", "q" + g, null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                    "user", "q" + g, null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
             history.add(new AgentExecutionContext.HistoryEntry(
-                    "assistant", "a" + g, null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                    "assistant", "a" + g, null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         }
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
 
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, "[2]");
 
@@ -369,7 +370,7 @@ class ChatServiceTest {
 
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
@@ -388,7 +389,7 @@ class ChatServiceTest {
 
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "assistant", "a1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "assistant", "a1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
@@ -403,7 +404,7 @@ class ChatServiceTest {
 
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
@@ -419,7 +420,7 @@ class ChatServiceTest {
 
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null));
+                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
@@ -487,5 +488,137 @@ class ChatServiceTest {
 
         verify(hookManager).triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
         verify(hookManager).triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
+    }
+
+    @Test
+    void chat_请求级images附加到消息保存与HistoryEntry() {
+        List<ImageContent> images = List.of(
+                ImageContent.builder().imgId("img-1").imgText("data:image/png;base64,AAA").build());
+        ChatRequest request = ChatRequest.builder().sessionId(sessionId).content("看图").conversationId("conv-1")
+                .images(images).build();
+        AgentContextManager.AgentSessionContext sessionCtx =
+                new AgentContextManager.AgentSessionContext(context, mutator, new java.util.concurrent.atomic.AtomicBoolean(false));
+
+        when(agentContextManager.build(sessionId)).thenReturn(builder);
+        when(builder.modelIdOverride(any())).thenReturn(builder);
+        when(builder.build()).thenReturn(sessionCtx);
+        SessionManager.MessageSaveBuilder msgBuilder = mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF);
+        when(sessionManager.messageSave()).thenReturn(msgBuilder);
+        when(context.getSystemPrompt()).thenReturn("");
+        when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
+        when(context.getSkills()).thenReturn(null);
+        when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
+        when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
+        when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
+        when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
+        when(modelInvoker.invokeStream(any())).thenReturn(Flux.empty());
+
+        chatService.chat(request);
+
+        verify(msgBuilder).images(images);
+        ArgumentCaptor<AgentExecutionContext.HistoryEntry> entryCaptor =
+                ArgumentCaptor.forClass(AgentExecutionContext.HistoryEntry.class);
+        verify(mutator).addHistoryEntry(entryCaptor.capture());
+        assertEquals(images, entryCaptor.getValue().images());
+    }
+
+    @Test
+    void chat_请求无images时保持现有行为不调用images() {
+        ChatRequest request = ChatRequest.builder().sessionId(sessionId).content("hello").conversationId("conv-1").build();
+        AgentContextManager.AgentSessionContext sessionCtx =
+                new AgentContextManager.AgentSessionContext(context, mutator, new java.util.concurrent.atomic.AtomicBoolean(false));
+
+        when(agentContextManager.build(sessionId)).thenReturn(builder);
+        when(builder.modelIdOverride(any())).thenReturn(builder);
+        when(builder.build()).thenReturn(sessionCtx);
+        SessionManager.MessageSaveBuilder msgBuilder = mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF);
+        when(sessionManager.messageSave()).thenReturn(msgBuilder);
+        when(context.getSystemPrompt()).thenReturn("");
+        when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
+        when(context.getSkills()).thenReturn(null);
+        when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
+        when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
+        when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
+        when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
+        when(modelInvoker.invokeStream(any())).thenReturn(Flux.empty());
+
+        chatService.chat(request);
+
+        ArgumentCaptor<AgentExecutionContext.HistoryEntry> entryCaptor =
+                ArgumentCaptor.forClass(AgentExecutionContext.HistoryEntry.class);
+        verify(mutator).addHistoryEntry(entryCaptor.capture());
+        assertNull(entryCaptor.getValue().images());
+    }
+
+    @Test
+    void chat_buildMessageFromEntry透传images至模型消息() {
+        List<ImageContent> images = List.of(
+                ImageContent.builder().imgId("img-1").imgText("data:image/png;base64,AAA").build());
+        AgentExecutionContext.HistoryEntry userEntry = new AgentExecutionContext.HistoryEntry(
+                "user", "看图", null, null, java.time.LocalDateTime.now(),
+                List.of(), null, null, null, images);
+        ChatRequest request = ChatRequest.builder().sessionId(sessionId).content("看图").conversationId("conv-1").build();
+        AgentContextManager.AgentSessionContext sessionCtx =
+                new AgentContextManager.AgentSessionContext(context, mutator, new java.util.concurrent.atomic.AtomicBoolean(false));
+
+        when(agentContextManager.build(sessionId)).thenReturn(builder);
+        when(builder.modelIdOverride(any())).thenReturn(builder);
+        when(builder.build()).thenReturn(sessionCtx);
+        when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
+        when(context.getSystemPrompt()).thenReturn("base_prompt");
+        when(context.getHistory()).thenReturn(List.of(userEntry));
+        when(context.getSkills()).thenReturn(null);
+        when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
+        when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
+        when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
+        when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
+        when(modelInvoker.invokeStream(any())).thenReturn(Flux.empty());
+
+        chatService.chat(request);
+
+        ArgumentCaptor<com.ghost616.agentbase.dto.model.ChatRequest> captor =
+                ArgumentCaptor.forClass(com.ghost616.agentbase.dto.model.ChatRequest.class);
+        verify(modelInvoker).invokeStream(captor.capture());
+        Message userMsg = captor.getValue().getMessages().stream()
+                .filter(m -> "user".equals(m.getRole()))
+                .findFirst().orElse(null);
+        assertNotNull(userMsg, "模型请求应包含 user 消息");
+        assertEquals(images, userMsg.getImages());
+    }
+
+    @Test
+    void fold_折叠区首条user消息仅保留content忽略图片() {
+        List<ImageContent> images = List.of(
+                ImageContent.builder().imgId("img-1").imgText("data:image/png;base64,AAA").build());
+        List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
+        for (int g = 0; g < 12; g++) {
+            history.add(new AgentExecutionContext.HistoryEntry(
+                    "user", "q" + g, null, null, java.time.LocalDateTime.now(),
+                    List.of(), null, null, null, images));
+            history.add(new AgentExecutionContext.HistoryEntry(
+                    "assistant", "a" + g, null, null, java.time.LocalDateTime.now(),
+                    List.of(), null, null, null, null));
+        }
+        history.add(new AgentExecutionContext.HistoryEntry(
+                "user", "hello", null, null, java.time.LocalDateTime.now(),
+                List.of(), null, null, null, null));
+
+        com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
+
+        List<Message> messages = captured.getMessages();
+        for (Message m : messages) {
+            if ("user".equals(m.getRole()) && m.getContent() != null && m.getContent().startsWith("q")
+                    && Integer.parseInt(m.getContent().substring(1)) < 10) {
+                assertNull(m.getImages(), "折叠区 user 消息应忽略图片，仅保留 content 文本");
+            }
+        }
+        Message q10 = messages.stream()
+                .filter(m -> "user".equals(m.getRole()) && "q10".equals(m.getContent()))
+                .findFirst().orElse(null);
+        assertNotNull(q10, "近端区应保留 q10 完整消息");
+        assertEquals(images, q10.getImages(), "近端区 user 消息应保留图片");
     }
 }

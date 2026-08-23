@@ -163,5 +163,6 @@
   "platform-app/src/main/java/com/ghost616/platform/service/agent/SubSessionResultProviderImpl.java": "2b80419949bc28a3cdbe504db7621fc9",
   "platform-app/src/test/java/com/ghost616/platform/service/agent/SubSessionResultProviderImplTest.java": "8a59c920f333d01c284c1763e0c911ca",
   "platform-app/src/main/java/com/ghost616/platform/session/UserContextThreadVariableHandler.java": "221df97a77c6cf8fc6cdee12d496601b",
-  "platform-app/src/test/java/com/ghost616/platform/session/UserContextThreadVariableHandlerTest.java": "e2403aa846c0fcc26e5b07741183c0f6"
+  "platform-app/src/test/java/com/ghost616/platform/session/UserContextThreadVariableHandlerTest.java": "e2403aa846c0fcc26e5b07741183c0f6",
+  "platform-app/src/main/java/com/ghost616/platform/dto/session/SessionMessageDTO.java": "6ae87c1568e458079c95bdc2137a001d"
 }

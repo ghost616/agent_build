@@ -30,5 +30,37 @@
     "code_reviewed": false,
     "plan_completed": true,
     "test_passed": true
+  },
+  {
+    "plan_id": "plan_f9ecc0b2-ed89-4665-a14d-0c3b80e171fa",
+    "plan_summary": "支持大模型图像理解——图片对象数组（imgId+imgText）基础能力",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_308ca9b0-b68c-4658-a240-54da41cb2458",
+    "plan_summary": "支持大模型图像理解——图片映射表持久化层",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_9326d298-27ac-4c72-80ab-ac56b6f5a79a",
+    "plan_summary": "支持大模型图像理解——消息图片映射持久化实现（service 层）",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_9bfbce1c-b74e-45af-94bd-a060765f1581",
+    "plan_summary": "支持大模型图像理解——各平台 ModelInvoker 多图构建",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
   }
 ]

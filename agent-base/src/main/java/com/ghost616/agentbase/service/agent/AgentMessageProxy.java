@@ -2,6 +2,7 @@ package com.ghost616.agentbase.service.agent;
 
 import com.ghost616.agentbase.dto.chat.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatChunk;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.enums.FinishReason;
 import com.ghost616.agentbase.util.JsonMapper;
@@ -33,11 +34,27 @@ public class AgentMessageProxy {
     }
 
     public Message sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking) {
+        return sendUserMessage(childSessionId, content, modelId, thinking, null);
+    }
+
+    /**
+     * 向子会话发送用户消息（支持图片对象数组）。
+     *
+     * @param childSessionId 子会话 ID
+     * @param content        用户消息内容
+     * @param modelId        模型 ID（可为 null）
+     * @param thinking       是否启用思考模式（可为 null）
+     * @param images         图片列表（可为 null/空，imgId 仅供前端关联，不传给模型）
+     * @return 最终 assistant 回复消息
+     */
+    public Message sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking,
+                                   List<ImageContent> images) {
         ChatRequest request = ChatRequest.builder()
                 .sessionId(childSessionId)
                 .content(content)
                 .modelId(modelId)
                 .thinking(thinking)
+                .images(images)
                 .build();
         return processChat(request);
     }
@@ -52,11 +69,27 @@ public class AgentMessageProxy {
      * @return 最终 assistant 回复消息
      */
     public Message sendUserMessageToSession(String sessionId, String content, String modelId, Boolean thinking) {
+        return sendUserMessageToSession(sessionId, content, modelId, thinking, null);
+    }
+
+    /**
+     * 向会话发送用户消息（支持图片对象数组），自动生成 24 位 conversationId 标识对话归属。
+     *
+     * @param sessionId 会话 ID
+     * @param content   用户消息内容
+     * @param modelId   模型 ID（可为 null）
+     * @param thinking  是否启用思考模式（可为 null 表示默认行为）
+     * @param images    图片列表（可为 null/空，imgId 仅供前端关联，不传给模型）
+     * @return 最终 assistant 回复消息
+     */
+    public Message sendUserMessageToSession(String sessionId, String content, String modelId, Boolean thinking,
+                                            List<ImageContent> images) {
         ChatRequest request = ChatRequest.builder()
                 .sessionId(sessionId)
                 .content(content)
                 .modelId(modelId)
                 .thinking(thinking)
+                .images(images)
                 .conversationId(generateConversationId())
                 .build();
         return processChat(request);
