@@ -31,6 +31,10 @@
     {
       "content": "图片对象数组（ImageContent：imgId+imgText）除加到 ChatRequest/Message/HistoryEntry 外，AgentExecutionContext.sendUserMessage、AgentMessageProxy.sendUserMessage 和 sendUserMessageToSession 也必须支持图片对象数组参数（联动 SendUserMessageCallback 接口、ChildMessageEvent 及 AgentContextManager 内部方法）。",
       "timestamp": "2026-08-23T03:13:51.620Z"
+    },
+    {
+      "content": "评估执行前台模式 Bug：WS 触发的子会话执行（streamChildReply → handleSubSessionFlow fromWs）与子→主回传续接（onSessionMessage → continueEvaluationChat）为 fire-and-forget（void 异步），主流程 execute 不等待其完成，导致子会话未执行完就直接生成评估结果。修复：跟踪 WS 触发的异步活动（pendingAsyncRef 集合），主流程在每条消息处理后与生成评估结果前等待全部异步活动完成（含嵌套新增）。",
+      "timestamp": "2026-08-23T12:27:56.910Z"
     }
   ]
 }

@@ -75,10 +75,12 @@ export function useEvaluationExecute(): {
   const toolExecutingRef = useRef(false);
   /** 进行中的子会话 ID 集合（同一子会话并发/重发消息去重）。 */
   const activeChildIdsRef = useRef<Set<string>>(new Set());
+  /** WebSocket 触发的进行中异步活动集合（子会话执行/主会话续接），主流程 waitForPendingAsync 等待其清空。 */
+  const pendingAsyncRef = useRef<Set<Promise<void>>>(new Set());
   const streamChildReplyRef = useRef<(message: SendUserMessagePayload) => void>(() => {});
   const onSessionMessageRef = useRef<(message: SendUserMessagePayload) => void>(() => {});
   const handleSubSessionFlowRef = useRef<(params: SubSessionFlowParams) => Promise<void>>(async () => {});
-  const continueEvaluationChatRef = useRef<() => void>(() => {});
+  const continueEvaluationChatRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (foregroundLogRef.current) {
@@ -102,6 +104,42 @@ export function useEvaluationExecute(): {
       logLines.push(`${prefix} ${text}`);
     }
     setForegroundLog([...logLines]);
+  }, []);
+
+  /**
+   * 跟踪 WebSocket 触发的异步活动：加入 pendingAsyncRef 集合，完成后移除。
+   * 主流程 waitForPendingAsync 据此等待所有 WS 触发的子会话执行/续接完成后再继续
+   * （避免子会话未执行完就生成评估结果）。
+   * @param promise 待跟踪的异步活动
+   * @returns 原 promise（供调用方继续链式处理）
+   */
+  const trackAsync = useCallback((promise: Promise<void>): Promise<void> => {
+    pendingAsyncRef.current.add(promise);
+    void promise
+      .finally(() => {
+        pendingAsyncRef.current.delete(promise);
+      })
+      .catch(() => {
+        // 忽略：WS 触发流程内部已处理错误，仅保证不产生未处理拒绝
+      });
+    return promise;
+  }, []);
+
+  /**
+   * 等待所有 WebSocket 触发的异步活动（子会话执行/主会话续接）完成。
+   * 使用 while 循环：等待期间可能嵌套产生新的 WS 活动（如续接中新的子→主回传），
+   * 直到集合清空为止；每个跟踪 promise 最终完成（其内部循环受 executingRef 控制），
+   * 避免死锁；取消执行（executingRef=false）时立即退出。
+   */
+  const waitForPendingAsync = useCallback(async (): Promise<void> => {
+    while (executingRef.current && pendingAsyncRef.current.size > 0) {
+      const pending = Array.from(pendingAsyncRef.current);
+      try {
+        await Promise.all(pending);
+      } catch {
+        // 单个 promise 失败不应中断等待循环（等待期间保持 executingRef 为 true）
+      }
+    }
   }, []);
 
   const streamEvaluation = useCallback(
@@ -442,33 +480,37 @@ export function useEvaluationExecute(): {
    * （marker 不会被后端保存为重复用户消息），流式回复追加 [AI]/[思考] 日志行，
    * onDone 有工具调用时进入主会话工具循环。
    */
-  const continueEvaluationChat = useCallback((): void => {
+  const continueEvaluationChat = useCallback(async (): Promise<void> => {
     if (loadingRef.current || toolExecutingRef.current) return;
     const sessionId = executionSessionIdRef.current;
     if (!sessionId) return;
     loadingRef.current = true;
     const toolLoopCount = { current: 0 };
     const MAX_TOOL_LOOPS = 10;
-    abortRef.current = agentChatStream(
-      { sessionId, content: SEND_USER_MESSAGE_MARKER },
-      {
-        onDelta: (text) => appendStreamText('[AI]', text),
-        onReasoning: (text) => appendStreamText('[思考]', text),
-        onDone: async (hasToolCalls) => {
-          if (hasToolCalls) {
-            try {
-              await runToolCycle(sessionId, toolLoopCount, MAX_TOOL_LOOPS);
-            } catch {
-              // 续接工具循环异常不中断执行日志
+    await new Promise<void>((resolve) => {
+      abortRef.current = agentChatStream(
+        { sessionId, content: SEND_USER_MESSAGE_MARKER },
+        {
+          onDelta: (text) => appendStreamText('[AI]', text),
+          onReasoning: (text) => appendStreamText('[思考]', text),
+          onDone: async (hasToolCalls) => {
+            if (hasToolCalls) {
+              try {
+                await runToolCycle(sessionId, toolLoopCount, MAX_TOOL_LOOPS);
+              } catch {
+                // 续接工具循环异常不中断执行日志
+              }
             }
-          }
-          loadingRef.current = false;
+            loadingRef.current = false;
+            resolve();
+          },
+          onError: () => {
+            loadingRef.current = false;
+            resolve();
+          },
         },
-        onError: () => {
-          loadingRef.current = false;
-        },
-      },
-    );
+      );
+    });
   }, [appendStreamText, runToolCycle]);
 
   continueEvaluationChatRef.current = continueEvaluationChat;
@@ -494,14 +536,14 @@ export function useEvaluationExecute(): {
       if (activeChildIdsRef.current.has(childId)) return;
       const content = payload.content || '';
       pushLog(`[子会话] ${content}`);
-      void handleSubSessionFlowRef.current({
+      trackAsync(handleSubSessionFlowRef.current({
         childId,
         userContent: content,
         streamContent: SEND_USER_MESSAGE_MARKER,
         fromWs: true,
-      });
+      }));
     },
-    [pushLog],
+    [pushLog, trackAsync],
   );
 
   streamChildReplyRef.current = streamChildReply;
@@ -525,9 +567,9 @@ export function useEvaluationExecute(): {
       // 执行中仅追加日志；空闲则以 marker 触发主会话基于新消息链继续
       if (loadingRef.current || toolExecutingRef.current) return;
       if (!executingRef.current) return;
-      continueEvaluationChatRef.current();
+      trackAsync(continueEvaluationChatRef.current());
     },
-    [pushLog],
+    [pushLog, trackAsync],
   );
 
   onSessionMessageRef.current = onSessionMessage;
@@ -578,6 +620,7 @@ export function useEvaluationExecute(): {
       // 每次执行重置统一日志数组与前台日志（重复执行重置日志与 handler）
       logLinesRef.current = [];
       activeChildIdsRef.current.clear();
+      pendingAsyncRef.current.clear();
       setForegroundLog([]);
       const executionType = evaluation.executionType || 'BACKGROUND';
 
@@ -624,9 +667,14 @@ export function useEvaluationExecute(): {
               pushLog(`[用户] ${msg}`);
 
               await sendForegroundMessage(evalSession.sessionId, msg);
+              // 每条消息完成后等待 WebSocket 触发的子会话执行/续接完成
+              await waitForPendingAsync();
             }
 
             if (!executingRef.current) break;
+
+            // 所有消息处理完、生成评估结果前等待 WebSocket 触发的异步活动清空
+            await waitForPendingAsync();
 
             pushLog('\n正在生成评估结果...');
             await generateEvalResult(evaluationId, evalSession.sessionId);
@@ -650,6 +698,7 @@ export function useEvaluationExecute(): {
         loadingRef.current = false;
         toolExecutingRef.current = false;
         activeChildIdsRef.current.clear();
+        pendingAsyncRef.current.clear();
         // 执行结束注销 WebSocket 消息分发处理器
         unregisterEvaluationHandler();
         if (onRefresh) {
@@ -666,6 +715,7 @@ export function useEvaluationExecute(): {
       sendForegroundMessage,
       streamBackground,
       unregisterEvaluationHandler,
+      waitForPendingAsync,
     ],
   );
 
@@ -680,6 +730,8 @@ export function useEvaluationExecute(): {
     loadingRef.current = false;
     toolExecutingRef.current = false;
     activeChildIdsRef.current.clear();
+    // 取消执行立即退出等待并清理 WS 触发的异步活动跟踪
+    pendingAsyncRef.current.clear();
     // 取消执行注销 WebSocket 消息分发处理器
     unregisterEvaluationHandler();
   };

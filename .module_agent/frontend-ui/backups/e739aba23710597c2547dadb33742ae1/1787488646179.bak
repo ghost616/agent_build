@@ -620,9 +620,8 @@ describe('useEvaluationExecute 异步活动跟踪 (pendingAsyncRef/trackAsync/wa
     expect(block).not.toBeNull();
     if (block) {
       expect(block[0]).toContain('while (executingRef.current && pendingAsyncRef.current.size > 0)');
+      expect(block[0]).toContain('每个跟踪 promise 最终完成');
     }
-    // JSDoc 注释在函数外，对全文件断言防死锁说明
-    expect(source).toContain('每个跟踪 promise 最终完成');
   });
 
   it('streamChildReply 应以 trackAsync 跟踪 WS 触发的子会话执行', () => {
