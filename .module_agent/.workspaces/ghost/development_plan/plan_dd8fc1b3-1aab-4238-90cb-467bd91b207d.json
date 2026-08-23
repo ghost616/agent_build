@@ -1,0 +1,10 @@
+{
+  "plan_id": "plan_dd8fc1b3-1aab-4238-90cb-467bd91b207d",
+  "module_name": "frontend-ui",
+  "development_plan": "评估执行（前台 FOREGROUND）页面支持 WebSocket 模式子会话展示与执行。任务：1) src/pages/evaluations/hooks/useEvaluationExecute.ts 新增 logLinesRef 统一持有日志数组（执行流程与 WebSocket 回调共用同一引用，解决异步闭包过期），每次 execute 开始重置；2) 改造 handleSubSessionFlow 为统一参数（childId/userContent/streamContent/thinking/fromWs），支持工具触发与 WebSocket 触发两种入口：WS 触发 streamContent 传 SEND_USER_MESSAGE_MARKER（消息已由后端保存，不重复保存 user 消息）、fromWs=true 跳过 completeSubSession、完整复用工具循环（executeTools → pollSubToolStatus → continueChatStream）；3) 前台执行创建执行会话后以 executionSessionId 注册 SessionPageHandler：streamChildReply（主→子）追加 [子会话] {content} 日志行并触发 handleSubSessionFlow（marker）执行子会话、回复流式追加 [子会话AI] 行；onSessionMessage（子→主）追加 [子会话回传] {content} 日志行，判断执行会话是否在执行（loading/toolExecuting）——执行中仅追加日志、空闲则以 marker 调用 agentChatStream 触发续接（[AI] 行）；4) 执行结束/取消时注销 handler；5) src/pages/evaluations/EvaluationResultList.tsx 如需配合 handler 生命周期/日志展示的接入；6) 同步更新/新增相关测试（handler 注册注销、日志追加、执行状态判断、marker 透传、fromWs 跳过 completeSubSession）。边界：前台执行未运行时无 handler；多页面共存互不干扰；重复执行重置日志与 handler；不触发额外保存 user 消息。",
+  "session_id": "de56cea8-f35d-42e7-a286-d2985dfd410d",
+  "modified_files": [
+    "src/pages/evaluations/hooks/useEvaluationExecute.ts",
+    "src/pages/evaluations/__tests__/useEvaluationExecute.test.tsx"
+  ]
+}

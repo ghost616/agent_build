@@ -115,11 +115,11 @@
     },
     {
       "path": "src/pages/evaluations/hooks/useEvaluationExecute.ts",
-      "description": "评估执行核心逻辑 hook，封装 streamEvaluation/streamBackground/pollGenerateStatus/runToolCycle/sendForegroundMessage/execute 等方法及 executing/executionProgress/foregroundModalVisible/foregroundLog/foregroundLogRef/handleCancelForeground 状态；BACKGROUND 模式采用 status→stream(cacheId)→remove(cacheId)→status 循环（先 getEvaluationCacheStatus 判断 hasCache 获取 cacheId，有缓存则 getEvaluationStream 流式接收、流结束 removeEvaluationCache 清理后回到 status 循环直到 hasCache=false），FOREGROUND 模式创建会话逐条发送消息并生成结果；执行完成后刷新结果列表"
+      "description": "评估执行核心逻辑 hook，封装 streamEvaluation/streamBackground/pollGenerateStatus/runToolCycle/sendForegroundMessage/execute 等方法及 executing/executionProgress/foregroundModalVisible/foregroundLog/foregroundLogRef/handleCancelForeground 状态；logLinesRef 统一持有日志数组（执行流程与 WebSocket 回调共用同一引用，每次 execute 开始重置）；BACKGROUND 模式采用 status→stream(cacheId)→remove(cacheId)→status 循环（先 getEvaluationCacheStatus 判断 hasCache 获取 cacheId，有缓存则 getEvaluationStream 流式接收、流结束 removeEvaluationCache 清理后回到 status 循环直到 hasCache=false），FOREGROUND 模式创建会话逐条发送消息并生成结果；handleSubSessionFlow 统一参数化（childId/userContent/streamContent/thinking/fromWs）支持工具触发与 WebSocket 触发（WS 触发 streamContent 传 SEND_USER_MESSAGE_MARKER、fromWs=true 跳过 completeSubSession）；前台执行创建执行会话后以 executionSessionId 注册 SessionPageHandler（streamChildReply 追加 [子会话] 日志并触发子会话执行、onSessionMessage 追加 [子会话回传] 日志并按 loading/toolExecuting 判断执行中仅追加日志/空闲以 marker 续接），执行结束/取消/卸载注销 handler；执行完成后刷新结果列表"
     },
     {
       "path": "src/pages/evaluations/__tests__/useEvaluationExecute.test.tsx",
-      "description": "useEvaluationExecute hook 的静态源代码分析测试，验证导入依赖、导出签名和执行逻辑覆盖"
+      "description": "useEvaluationExecute hook 的静态源代码分析测试，验证导入依赖（含 messageDispatcher 的 registerSessionPage/unregisterSessionPage/SEND_USER_MESSAGE_MARKER 与 SessionPageHandler/SendUserMessagePayload 类型）、导出签名、执行逻辑覆盖，以及 WebSocket 子会话展示与执行相关断言（logLinesRef 统一日志数组、handleSubSessionFlow 统一参数与 fromWs 跳过 completeSubSession、handler 注册/注销生命周期、streamChildReply/onSessionMessage 日志追加与执行状态判断、marker 续接 continueEvaluationChat）"
     },
     {
       "path": "src/types/model.ts",

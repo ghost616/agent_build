@@ -112,6 +112,9 @@
 - session.ts 导出 processSSEStream/StreamCallbacks/ChatChunk 供 evaluation.ts 复用
 - EvaluationResultList 执行日志 Modal 标题由「前台执行」改为「执行日志」（BACKGROUND/FOREGROUND 共用）
 - evaluation.ts 服务层移除 getExecutionStatus（GET /evaluations/{id}/execute/status）与 useEvaluationExecute 中 pollExecutionStatus/getExecutionStatus 轮询逻辑；executeEvaluation（POST /evaluations/{id}/execute）返回后直接进入 status→stream→remove 循环；types/evaluation.ts 的 ExecutionStatusResponse 移除 status/currentStep/totalSteps 字段，仅保留 evaluationId/executionSessionId
+- useEvaluationExecute 新增 logLinesRef 统一持有日志数组（执行流程与 WebSocket 回调共用同一引用解决异步闭包过期，每次 execute 开始重置，activeChildIdsRef 对同一子会话并发/重发消息去重）；pushLog/appendStreamText 两个稳定辅助函数统一写日志
+- handleSubSessionFlow 统一参数化（childId/userContent/streamContent/thinking/fromWs），工具触发与 WebSocket 触发共用：WS 触发 streamContent 传 SEND_USER_MESSAGE_MARKER（消息已由后端保存不重复保存 user 消息）、fromWs=true 跳过 completeSubSession（后端 subSessionDataMap 仅工具模式写入）、完整复用子会话工具循环（executeTools → pollSubToolStatus → continueChatStream）；工具触发由 runToolCycle 检测 needsSubSessionFlow 时 getSubSessionData 取数据后以统一参数调用
+- 前台执行创建执行会话后以 executionSessionId 注册 SessionPageHandler（registerEvaluationHandler/unregisterEvaluationHandler，重复执行先注销旧 handler）：streamChildReply（主→子）追加 [子会话] {content} 日志并触发 handleSubSessionFlow（marker）执行子会话（[子会话AI]/[子会话思考] 流式日志行）；onSessionMessage（子→主）追加 [子会话回传] {content} 日志，执行会话执行中（loadingRef/toolExecutingRef）仅追加日志、空闲以 SEND_USER_MESSAGE_MARKER 调用 agentChatStream 触发续接（[AI] 行，onDone 有工具调用进入主会话工具循环）；执行结束（finally）/取消（handleCancelForeground）/组件卸载均注销 handler；前台执行未运行时无 handler、多页面共存互不干扰（按主会话 ID 索引）、重复执行重置日志与 handler
 ## 知识库管理界面
 
 - 知识库管理页面 `/knowledge`：列表展示、名称搜索、状态筛选、新增/编辑/删除/启用禁用，"管理文件"跳转 `/knowledge/:kbId/files`

@@ -395,7 +395,7 @@ describe('useEvaluationExecute handleSubSessionFlow (统一参数)', () => {
 describe('useEvaluationExecute WebSocket 消息分发处理器', () => {
   it('FOREGROUND 创建执行会话后应注册 handler（以 executionSessionId 为主会话）', () => {
     const source = readFileSync(hookPath, 'utf-8');
-    const registerBlock = source.match(/const registerEvaluationHandler = useCallback\([\s\S]*?\n  \}, \[\]\);/);
+    const registerBlock = source.match(/const registerEvaluationHandler = useCallback\([\s\S]*?\n  \), \[\];/);
     expect(registerBlock).not.toBeNull();
     if (registerBlock) {
       expect(registerBlock[0]).toContain('mainSessionId: executionSessionId');
@@ -408,7 +408,7 @@ describe('useEvaluationExecute WebSocket 消息分发处理器', () => {
 
   it('重复执行时应先注销旧执行会话的 handler', () => {
     const source = readFileSync(hookPath, 'utf-8');
-    const registerBlock = source.match(/const registerEvaluationHandler = useCallback\([\s\S]*?\n  \}, \[\]\);/);
+    const registerBlock = source.match(/const registerEvaluationHandler = useCallback\([\s\S]*?\n  \), \[\];/);
     expect(registerBlock).not.toBeNull();
     if (registerBlock) {
       expect(registerBlock[0]).toContain('unregisterSessionPage(executionSessionIdRef.current)');
@@ -446,7 +446,7 @@ describe('useEvaluationExecute WebSocket 消息分发处理器', () => {
 
   it('unregisterEvaluationHandler 应在注销后清空 executionSessionIdRef', () => {
     const source = readFileSync(hookPath, 'utf-8');
-    const unregisterBlock = source.match(/const unregisterEvaluationHandler = useCallback\([\s\S]*?\n  \}, \[\]\);/);
+    const unregisterBlock = source.match(/const unregisterEvaluationHandler = useCallback\([\s\S]*?\n  \), \[\];/);
     expect(unregisterBlock).not.toBeNull();
     if (unregisterBlock) {
       expect(unregisterBlock[0]).toContain('unregisterSessionPage(executionSessionId)');

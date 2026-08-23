@@ -62,5 +62,13 @@
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
+  },
+  {
+    "plan_id": "plan_dd8fc1b3-1aab-4238-90cb-467bd91b207d",
+    "plan_summary": "评估执行页面支持 WebSocket 模式子会话展示与执行",
+    "starter_session_id": "session-b9dd66d4-5ca6-438c-9ca2-26191ca2532f",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
   }
 ]

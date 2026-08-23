@@ -1,0 +1,12 @@
+[
+  {
+    "plan_id": "plan_dd8fc1b3-1aab-4238-90cb-467bd91b207d",
+    "plan": "评估执行页 WebSocket 子会话展示与执行改造",
+    "modified_files": [
+      "src/pages/evaluations/hooks/useEvaluationExecute.ts",
+      "src/pages/evaluations/__tests__/useEvaluationExecute.test.tsx"
+    ],
+    "summary": "执行总结：本轮完成评估执行页 WebSocket 模式子会话展示与执行改造，共修改 2 个文件——\n1) src/pages/evaluations/hooks/useEvaluationExecute.ts：① 新增 logLinesRef 统一持有日志数组（执行流程与 WebSocket 回调共用同一引用解决异步闭包过期），每次 execute 开始重置，pushLog/appendStreamText 稳定辅助函数统一写日志；② handleSubSessionFlow 统一参数化（childId/userContent/streamContent/thinking/fromWs），工具触发与 WebSocket 触发共用——WS 触发 streamContent 传 SEND_USER_MESSAGE_MARKER（消息已由后端保存不重复保存 user 消息）、fromWs=true 跳过 completeSubSession、完整复用子会话工具循环（executeTools → pollSubToolStatus → continueChatStream）；③ 前台执行创建执行会话后以 executionSessionId 注册 SessionPageHandler：streamChildReply 追加 [子会话] {content} 日志并触发子会话执行（[子会话AI] 流式行），onSessionMessage 追加 [子会话回传] {content} 日志并按 loadingRef/toolExecutingRef 判断——执行中仅追加日志、空闲以 marker 调用 agentChatStream 触发续接（[AI] 行，onDone 有工具调用进入 runToolCycle）；④ 执行结束（finally）/取消（handleCancelForeground）/组件卸载均注销 handler，activeChildIdsRef 同一子会话并发去重；⑤ EvaluationResultList.tsx 无需改动（handler 生命周期与日志展示由 hook 内部封装，页面已展示 foregroundLog）；messageDispatcher.ts 无需改动（SessionPageHandler 接口不变）。\n2) src/pages/evaluations/__tests__/useEvaluationExecute.test.tsx：新增/更新 WebSocket 子会话相关静态断言（logLinesRef 统一日志数组、handleSubSessionFlow 统一参数与 fromWs 跳过 completeSubSession、handler 注册/注销生命周期、streamChildReply/onSessionMessage 日志追加与执行状态判断、marker 续接 continueEvaluationChat），并修复 3 处 useCallback 块结尾正则（`\\}, [\\]\\);` 匹配源码 `}, []);`）。\n测试总结：全部测试通过——静态源分析测试 80/80 通过（含此前 3 个正则缺陷用例）、全量 vitest 481/481 通过、正则完备性核验 27/27、变更源码 tsc 零新增错误（仅存量基线：测试文件缺 node types 294 处 + EvaluationResultList.tsx:261 / ToolList.tsx:213 两处既有错误）、回归 messageDispatcher.test.ts 17/17 与 AgentChat.test.tsx 55/55 通过（SessionPageHandler 接口未破坏）；E2E 未执行（本任务为纯前端逻辑/静态源分析，无需后端服务，离朱环境无 E2E 场景）。遗留事项（非本次变更）：测试环境缺 @types/node、ToolList.tsx:213 与 EvaluationResultList.tsx:261 存量类型错误，建议后续单独修复。",
+    "errors": []
+  }
+]
