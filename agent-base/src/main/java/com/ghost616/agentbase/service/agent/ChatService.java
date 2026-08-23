@@ -138,13 +138,14 @@ public class ChatService {
             contextMutator.setConversationId(conversationId);
             sessionManager.messageSave().sessionId(sessionId).role("user").content(content)
                     .images(images)
+                    .userInput(true)
                     .conversationId(context.getConversationId()).save();
 
             AgentExecutionContext.HistoryEntry userEntry = new AgentExecutionContext.HistoryEntry(
                     "user", content, null, null,
                     LocalDateTime.now(),
                     Collections.emptyList(),
-                    null, null, null, images);
+                    null, null, null, images, true);
             contextMutator.addHistoryEntry(userEntry);
         }
 
@@ -398,6 +399,7 @@ public class ChatService {
         if (entry.images() != null && !entry.images().isEmpty()) {
             builder.images(entry.images());
         }
+        builder.userInput(entry.userInput());
         return builder.build();
     }
 
@@ -808,7 +810,7 @@ public class ChatService {
         while (i < messages.size()) {
             int groupStart = i;
             i++;
-            while (i < messages.size() && !"user".equals(messages.get(i).getRole())) {
+            while (i < messages.size() && !isFoldGroupStart(messages.get(i))) {
                 i++;
             }
             List<Message> group = new ArrayList<>();
@@ -867,6 +869,17 @@ public class ChatService {
                 .build());
 
         return new FoldResult(result, anchorMessages);
+    }
+
+    /**
+     * 折叠分组点判断：仅 user 角色且 user_input=true（用户真实输入）的 user 消息产生新组；
+     * user_input=false（会话间传递，如子会话/父会话推送的 user 消息）不产生新组，归入相邻组。
+     *
+     * @param message 待判断的消息
+     * @return 是否为折叠分组起点
+     */
+    private boolean isFoldGroupStart(Message message) {
+        return "user".equals(message.getRole()) && Boolean.TRUE.equals(message.getUserInput());
     }
 
     private Message buildHistoryGroupMessage(List<Message> group, int groupIndex, AgentExecutionContext context) {

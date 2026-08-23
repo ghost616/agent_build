@@ -119,11 +119,6 @@ class SessionMemoryServiceTest {
     }
 
     private Message message(Long id, Long sessionId, String role, String content, int seq, boolean rollback) {
-        return message(id, sessionId, role, content, seq, rollback, "user".equals(role));
-    }
-
-    private Message message(Long id, Long sessionId, String role, String content, int seq, boolean rollback,
-                            boolean userInput) {
         Message m = new Message();
         m.setId(id);
         m.setSessionId(sessionId);
@@ -131,7 +126,6 @@ class SessionMemoryServiceTest {
         m.setContent(content);
         m.setSequenceNum(seq);
         m.setRollback(rollback);
-        m.setUserInput(userInput);
         m.setCreateTime(LocalDateTime.of(2026, 1, 1, 0, 0).plusSeconds(seq));
         return m;
     }
@@ -148,7 +142,7 @@ class SessionMemoryServiceTest {
             ModelConfigData data = invocation.getArgument(0);
             return "embed-model".equals(data.modelName()) ? embedInvoker : llmInvoker;
         });
-        lenient().when(embedInvoker.embed(any(EmbeddingRequest.class))).thenReturn(
+        when(embedInvoker.embed(any(EmbeddingRequest.class))).thenReturn(
                 EmbeddingResponse.builder().embeddings(List.of(
                         EmbeddingResponse.EmbeddingItem.builder().index(0).embedding(List.of(0.1f, 0.2f)).build()))
                         .build());
@@ -580,105 +574,6 @@ class SessionMemoryServiceTest {
         assertEquals(epochMillis(7), docs.get(2).getAggregationEndTime());
         assertEquals("汇总A2", docs.get(2).getAggregationText());
         verify(llmInvoker, times(4)).invoke(any(ChatRequest.class));
-    }
-
-    @Test
-    @DisplayName("user_input=false 的 user 消息不产生新组，归入相邻组且聚合内容包含完整消息链")
-    void aggregate_userInputFalse_mergedIntoAdjacentGroup() {
-        AgentConfig agent = memoryAgent(5L);
-        when(agentConfigMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(agent));
-        Session s = session(100L, 5L, 1);
-        when(sessionMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(s));
-        when(agentConfigMapper.selectBatchIds(any())).thenReturn(List.of(agent));
-
-        when(messageMapper.countUserMessages(100L)).thenReturn(3L);
-        when(messageMapper.findNthUserSequenceNum(100L, 1)).thenReturn(6);
-        List<Message> newMessages = List.of(
-                message(2L, 100L, "user", "q1", 2, false, true),
-                message(3L, 100L, "assistant", "a1", 3, false, false),
-                message(4L, 100L, "user", "passed-msg", 4, false, false),
-                message(5L, 100L, "assistant", "a2", 5, false, false));
-        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(newMessages);
-
-        stubInvokers();
-        when(llmInvoker.invoke(any(ChatRequest.class)))
-                .thenReturn(ChatResponse.builder().content("1. 技术").build())
-                .thenReturn(ChatResponse.builder().content("汇总：含传递消息的完整组").build());
-
-        service.aggregateSessionMemories();
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<SessionMemoryDocument>> docCaptor = ArgumentCaptor.forClass(List.class);
-        verify(sessionMemoryESClient).batchSave(docCaptor.capture());
-        List<SessionMemoryDocument> docs = docCaptor.getValue();
-        assertEquals(1, docs.size());
-        SessionMemoryDocument doc = docs.get(0);
-        assertEquals(2, doc.getAggregationStartSeq());
-        assertEquals(5, doc.getAggregationEndSeq());
-        assertEquals(epochMillis(2), doc.getAggregationStartTime());
-        assertEquals(epochMillis(5), doc.getAggregationEndTime());
-        assertEquals("汇总：含传递消息的完整组", doc.getAggregationText());
-        verify(llmInvoker, times(2)).invoke(any(ChatRequest.class));
-    }
-
-    @Test
-    @DisplayName("user_input=false 消息位于组内时，归类失败降级文档文本包含完整消息链（含传递消息）")
-    void aggregate_userInputFalse_classificationFailed_contentIncludesPassedMessage() {
-        AgentConfig agent = memoryAgent(5L);
-        when(agentConfigMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(agent));
-        Session s = session(100L, 5L, 1);
-        when(sessionMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(s));
-        when(agentConfigMapper.selectBatchIds(any())).thenReturn(List.of(agent));
-
-        when(messageMapper.countUserMessages(100L)).thenReturn(3L);
-        when(messageMapper.findNthUserSequenceNum(100L, 1)).thenReturn(6);
-        List<Message> newMessages = List.of(
-                message(2L, 100L, "user", "q1", 2, false, true),
-                message(3L, 100L, "assistant", "a1", 3, false, false),
-                message(4L, 100L, "user", "passed-msg", 4, false, false),
-                message(5L, 100L, "assistant", "a2", 5, false, false));
-        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(newMessages);
-
-        stubInvokers();
-        when(llmInvoker.invoke(any(ChatRequest.class)))
-                .thenReturn(ChatResponse.builder().content(null).build());
-
-        service.aggregateSessionMemories();
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<SessionMemoryDocument>> docCaptor = ArgumentCaptor.forClass(List.class);
-        verify(sessionMemoryESClient).batchSave(docCaptor.capture());
-        List<SessionMemoryDocument> docs = docCaptor.getValue();
-        assertEquals(1, docs.size());
-        SessionMemoryDocument doc = docs.get(0);
-        assertEquals(2, doc.getAggregationStartSeq());
-        assertEquals(5, doc.getAggregationEndSeq());
-        assertEquals("【user】: q1\n【assistant】: a1\n【user】: passed-msg\n【assistant】: a2",
-                doc.getAggregationText());
-        verify(llmInvoker, times(1)).invoke(any(ChatRequest.class));
-    }
-
-    @Test
-    @DisplayName("无 user_input=true 的 user 消息时 groupByUser 不产生分组，跳过聚合")
-    void aggregate_noUserInputTrue_skipAggregation() {
-        AgentConfig agent = memoryAgent(5L);
-        when(agentConfigMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(agent));
-        Session s = session(100L, 5L, 1);
-        when(sessionMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(s));
-        when(agentConfigMapper.selectBatchIds(any())).thenReturn(List.of(agent));
-
-        when(messageMapper.countUserMessages(100L)).thenReturn(3L);
-        when(messageMapper.findNthUserSequenceNum(100L, 1)).thenReturn(4);
-        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(
-                message(2L, 100L, "user", "passed-only", 2, false, false),
-                message(3L, 100L, "assistant", "a1", 3, false, false)));
-        stubInvokers();
-
-        service.aggregateSessionMemories();
-
-        verify(sessionMemoryESClient, never()).batchSave(any());
-        verify(sessionMapper, never()).updateById(any(Session.class));
-        verify(llmInvoker, never()).invoke(any(ChatRequest.class));
     }
 
     @Test

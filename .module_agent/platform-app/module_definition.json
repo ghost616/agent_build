@@ -3,7 +3,7 @@
   "files": [
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultMessageDataProvider.java",
-      "description": "默认消息数据提供者实现，负责消息的持久化存储、查询、软回滚和记忆点过滤，实现 agent-base 的 MessageDataProvider 接口。saveMessage 第 5 参为 ToolInfo toolInfo（toolCallId/toolName），将其持久化为 type=tool_result 的 MessageToolCall 行，并在 message 表 tool_call_id 列记录 toolCallId；同时将三种类型的工具调用统一构建进一个 List<MessageToolCall>：function 工具调用行（读 toolCallId/toolCallName/toolCallArguments/type）、webSearchCall 行（type=web_search_call，web_search_call 列存单条 WebSearchCallData 的 JSON）、customToolCall 行（type=custom_tool_call，custom_tool_call 列存单条 CustomToolCallData 的 JSON），合并后通过注入的 MessageToolCallService.saveBatch 一次批量插入；saveMessage 支持 images 参数（List<ImageContent>），消息插入后逐条写入 MessageImage 映射（messageId/imgId/imgText，依赖 MessageImageMapper）；getMessages 从 MessageToolCall 表读取各行，按 type 分类反序列化：web_search_call 行聚合为 List<WebSearchCallData>、custom_tool_call 行聚合为 List<CustomToolCallData>，tool_result 行不进入 toolCalls 列表，并通过匹配 message.tool_call_id 与 MessageToolCall 行构造 ToolInfo 填充 MessageDTO.toolInfo，其余行按普通工具调用处理（读 type 构建 ToolCallData）；getMessages 按 messageId 联查 message_image 表组装 List<ImageContent> 填充 MessageDTO.images；getMessages 记忆点过滤：通过 memoryPointCache（ConcurrentHashMap，TTL 60 秒，最大 2000 条时先清理过期条目，sessionId→MemoryPointCacheEntry（含 memoryPointSequenceNum 与 expireAt））缓存会话记忆点，命中未过期缓存直接返回；session.memoryPointSequenceNum 非 null 时在查询追加 sequence_num >= memoryPoint 的 ge 过滤条件，其余消息全量查询返回，不再做消息组截断（已移除 resolveMemoryTruncationBounds 方法与 TruncationBounds record，及 AgentConfig/AgentConfigMapper 依赖）；提供 rollbackToLastUserMessage 软回滚能力，按回滚消息 ID 集合同步删除 message_tool_call 与 message_image 映射记录；提供 toMessageDTOs/toSessionMessageDTOs/toSessionMessageDTO API 层消息映射（含 images 透传）。数据用户隔离：saveMessage 从 UserContext 获取当前登录用户填充 message.user_id（无用户上下文返回 null 留空，异步工具执行/评估执行场景由线程变量传播保证上下文可取）"
+      "description": "默认消息数据提供者实现，负责消息的持久化存储、查询、软回滚和记忆点过滤，实现 agent-base 的 MessageDataProvider 接口。saveMessage 第 5 参为 ToolInfo toolInfo（toolCallId/toolName），将其持久化为 type=tool_result 的 MessageToolCall 行，并在 message 表 tool_call_id 列记录 toolCallId；同时将三种类型的工具调用统一构建进一个 List<MessageToolCall>：function 工具调用行（读 toolCallId/toolCallName/toolCallArguments/type）、webSearchCall 行（type=web_search_call，web_search_call 列存单条 WebSearchCallData 的 JSON）、customToolCall 行（type=custom_tool_call，custom_tool_call 列存单条 CustomToolCallData 的 JSON），合并后通过注入的 MessageToolCallService.saveBatch 一次批量插入；saveMessage 支持 images 参数（List<ImageContent>，消息插入后逐条写入 MessageImage 映射 messageId/imgId/imgText）与 userInput 参数（Boolean，持久化到 message.user_input 列，区分用户真实输入与会话间传递的 user 消息）；getMessages 从 MessageToolCall 表读取各行，按 type 分类反序列化：web_search_call 行聚合为 List<WebSearchCallData>、custom_tool_call 行聚合为 List<CustomToolCallData>，tool_result 行不进入 toolCalls 列表，并通过匹配 message.tool_call_id 与 MessageToolCall 行构造 ToolInfo 填充 MessageDTO.toolInfo，其余行按普通工具调用处理（读 type 构建 ToolCallData）；getMessages 按 messageId 联查 message_image 表组装 List<ImageContent> 填充 MessageDTO.images，并回填 MessageDTO.userInput；getMessages 记忆点过滤：通过 memoryPointCache（ConcurrentHashMap，TTL 60 秒，最大 2000 条时先清理过期条目，sessionId→MemoryPointCacheEntry（含 memoryPointSequenceNum 与 expireAt））缓存会话记忆点，命中未过期缓存直接返回；session.memoryPointSequenceNum 非 null 时在查询追加 sequence_num >= memoryPoint 的 ge 过滤条件，其余消息全量查询返回，不再做消息组截断（已移除 resolveMemoryTruncationBounds 方法与 TruncationBounds record，及 AgentConfig/AgentConfigMapper 依赖）；提供 rollbackToLastUserMessage 软回滚能力，回滚锚点查询限定 role='user' AND user_input=1（只回滚到用户真实输入），按回滚消息 ID 集合同步删除 message_tool_call 与 message_image 映射记录；提供 toMessageDTOs/toSessionMessageDTOs/toSessionMessageDTO API 层消息映射（含 images 与 userInput 透传）。数据用户隔离：saveMessage 从 UserContext 获取当前登录用户填充 message.user_id（无用户上下文返回 null 留空，异步工具执行/评估执行场景由线程变量传播保证上下文可取）"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultContextDataProvider.java",
@@ -415,7 +415,7 @@
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/memory/SessionMemoryService.java",
-      "description": "会话记忆聚合服务：定时聚合启用记忆功能智能体的会话新增消息生成记忆文档并向量化写入 ES；提供手动触发 triggerSessionMemory；提供记忆提示语读写 getMemoryPrompt/saveMemoryPrompt（session.memory_prompt）；提供聚合文本重生成 regenerateSummary（异步、状态可查询）+ getRegenerateStatus + saveAggregationText（重新向量化并更新 ES）。线程变量传播：regenerateSummary/triggerSessionMemory 的 CompletableFuture.runAsync 提交点通过注入的 ThreadVariableHandler 捕获用户上下文，异步线程内 apply() 恢复、finally 清理。数据用户隔离：buildMemoryDocuments/buildDailyMemoryDocument 新增 userId 参数，生成的记忆文档填充会话属主 userId"
+      "description": "会话记忆聚合服务：定时聚合启用记忆功能智能体的会话新增消息生成记忆文档并向量化写入 ES；提供手动触发 triggerSessionMemory；提供记忆提示语读写 getMemoryPrompt/saveMemoryPrompt（session.memory_prompt）；提供聚合文本重生成 regenerateSummary（异步、状态可查询）+ getRegenerateStatus + saveAggregationText（重新向量化并更新 ES）。分组聚合 buildMemoryDocuments 使用 groupByUser 分组：仅以 role='user' 且 user_input=true 的消息为组起点，user_input=false 的 user 消息（会话间传递）不产生新组、归入当前相邻组，聚合内容仍包含组内完整消息链（含 user_input=false 消息），无 user_input=true 消息时不产生分组跳过聚合。线程变量传播：regenerateSummary/triggerSessionMemory 的 CompletableFuture.runAsync 提交点通过注入的 ThreadVariableHandler 捕获用户上下文，异步线程内 apply() 恢复、finally 清理。数据用户隔离：buildMemoryDocuments/buildDailyMemoryDocument 新增 userId 参数，生成的记忆文档填充会话属主 userId"
     },
     {
       "path": "platform-app/src/test/java/com/ghost616/platform/model/SessionMemoryDocumentTest.java",
@@ -427,7 +427,7 @@
     },
     {
       "path": "platform-app/src/test/java/com/ghost616/platform/service/memory/SessionMemoryServiceTest.java",
-      "description": "会话记忆聚合服务单元测试，覆盖定时聚合（分组/按日/重试/主题归类各分支）、手动触发、记忆提示语读写、聚合文本重生成（异步状态、自定义 prompt、空消息 FAILED、会话不存在）、saveAggregationText（重新向量化+ES 更新、异常分支）场景"
+      "description": "会话记忆聚合服务单元测试，覆盖定时聚合（分组/按日/重试/主题归类各分支）、user_input=false 消息分组合并（不产生新组、聚合内容含完整消息链、无 user_input=true 跳过聚合）、手动触发、记忆提示语读写、聚合文本重生成（异步状态、自定义 prompt、空消息 FAILED、会话不存在）、saveAggregationText（重新向量化+ES 更新、异常分支）场景"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/message/MessageService.java",
@@ -483,7 +483,7 @@
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/dto/session/SessionMessageDTO.java",
-      "description": "会话消息 API 传输对象：字段与 agent-base 内部 MessageDataProvider.MessageDTO 保持一致并额外保留 sequenceNum，含 images（List<ImageContent>，图片映射 imgId/imgText，由 message_image 表联查组装），供 SessionController/ConversationController 等 Controller 层对外返回消息列表使用；由 DefaultMessageDataProvider.toSessionMessageDTOs/toSessionMessageDTO 从消息实体映射生成"
+      "description": "会话消息 API 传输对象：字段与 agent-base 内部 MessageDataProvider.MessageDTO 保持一致并额外保留 sequenceNum，含 images（List<ImageContent>，图片映射 imgId/imgText，由 message_image 表联查组装）与 userInput（Boolean，区分用户真实输入与会话间传递的 user 消息，前端暂不消费），供 SessionController/ConversationController 等 Controller 层对外返回消息列表使用；由 DefaultMessageDataProvider.toSessionMessageDTOs/toSessionMessageDTO 从消息实体映射生成"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/websocket/SessionConnectionRegistry.java",
@@ -559,7 +559,7 @@
     },
     {
       "path": "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultMessageDataProviderTest.java",
-      "description": "默认消息数据提供者单元测试：覆盖 saveMessage（toolCalls/webSearchCall/customToolCall/images 写入、usage 序列化与 token 累加、images 写入 MessageImage 行及 null 时不写入）、getMessages（MessageToolCall 分类组装、message_image 联查组装 MessageDTO.images、记忆点缓存命中/过期/分会话）、rollbackToLastUserMessage（软回滚标记、toolCall/messageImage 映射清理、无用户消息异常）、toMessageDTOs/toSessionMessageDTOs/toSessionMessageDTO 映射（含 images 透传与无图片 images 为 null）等场景"
+      "description": "默认消息数据提供者单元测试：覆盖 saveMessage（toolCalls/webSearchCall/customToolCall/images/userInput 写入、usage 序列化与 token 累加、images 写入 MessageImage 行及 null 时不写入、userInput 写入与 null 不报错）、getMessages（MessageToolCall 分类组装、message_image 联查组装 MessageDTO.images、MessageDTO.userInput 回填、记忆点缓存命中/过期/分会话）、rollbackToLastUserMessage（软回滚标记、toolCall/messageImage 映射清理、无用户消息异常、回滚锚点查询仅限 user_input=true 的 user 消息（wrapper 条件断言））、toMessageDTOs/toSessionMessageDTOs/toSessionMessageDTO 映射（含 images 与 userInput 透传、无图片 images 为 null、userInput 为 null 透传）等场景"
     }
   ]
 }

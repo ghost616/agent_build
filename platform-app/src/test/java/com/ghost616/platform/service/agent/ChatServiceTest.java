@@ -107,6 +107,7 @@ class ChatServiceTest {
         when(saveBuilder.role(any())).thenReturn(saveBuilder);
         when(saveBuilder.content(any())).thenReturn(saveBuilder);
         when(saveBuilder.images(any())).thenReturn(saveBuilder);
+        when(saveBuilder.userInput(any())).thenReturn(saveBuilder);
         when(saveBuilder.conversationId(any())).thenReturn(saveBuilder);
         when(saveBuilder.save()).thenReturn(null);
     }

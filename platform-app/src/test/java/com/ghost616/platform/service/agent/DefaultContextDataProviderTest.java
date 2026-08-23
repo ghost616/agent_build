@@ -476,9 +476,9 @@ class DefaultContextDataProviderTest {
     void getLatestMessages_委托调用MessageDataProvider并返回结果() {
         String sessionId = "100";
         MessageDataProvider.MessageDTO msg1 = new MessageDataProvider.MessageDTO(
-                "1", "100", "user", "hello", null, null, null, null, null, null, null, null, null, null, null);
+                "1", "100", "user", "hello", null, null, null, null, null, null, null, null, null, null, null, null);
         MessageDataProvider.MessageDTO msg2 = new MessageDataProvider.MessageDTO(
-                "2", "100", "assistant", "world", null, null, null, null, null, null, null, null, null, null, null);
+                "2", "100", "assistant", "world", null, null, null, null, null, null, null, null, null, null, null, null);
         when(messageDataProvider.getMessages(sessionId)).thenReturn(List.of(msg1, msg2));
 
         List<MessageDataProvider.MessageDTO> result = provider.getLatestMessages(sessionId);

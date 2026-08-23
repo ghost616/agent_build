@@ -54,4 +54,6 @@ public class SessionMessageDTO {
     private String conversationId;
 
     private List<ImageContent> images;
+
+    private Boolean userInput;
 }

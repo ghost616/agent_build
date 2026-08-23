@@ -607,11 +607,16 @@ public class SessionMemoryService {
         return invokeLlm(invoker, SYSTEM_DAILY_SUMMARY_PROMPT, fullContent);
     }
 
+    /**
+     * 按用户消息分组：仅以 user_input=true 的 user 消息为组起点。
+     * user_input=false 的 user 消息（会话间传递）不产生新组，归入当前（相邻）组，
+     * 聚合内容仍包含组内完整消息链（含 user_input=false 消息）。
+     */
     private List<List<Message>> groupByUser(List<Message> messages) {
         List<List<Message>> groups = new ArrayList<>();
         List<Message> current = null;
         for (Message m : messages) {
-            if ("user".equals(m.getRole())) {
+            if ("user".equals(m.getRole()) && Boolean.TRUE.equals(m.getUserInput())) {
                 current = new ArrayList<>();
                 groups.add(current);
             }

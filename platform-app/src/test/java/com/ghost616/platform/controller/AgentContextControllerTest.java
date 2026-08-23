@@ -77,7 +77,7 @@ class AgentContextControllerTest {
 
         AgentExecutionContext.HistoryEntry entry = new AgentExecutionContext.HistoryEntry(
                 "user", "hello", null, new ToolInfo("call-1", "getWeather"),
-                LocalDateTime.of(2026, 7, 24, 12, 0), List.of(), null, null, null, null);
+                LocalDateTime.of(2026, 7, 24, 12, 0), List.of(), null, null, null, null, null);
         when(ctx.getHistory()).thenReturn(List.of(entry));
         when(ctx.getSessionVariableKeys()).thenReturn(Set.of());
         when(ctx.getConversationVariableKeys()).thenReturn(Set.of());

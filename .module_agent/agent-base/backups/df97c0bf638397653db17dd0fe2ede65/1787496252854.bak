@@ -12,7 +12,7 @@ public interface MessageDataProvider {
     String saveMessage(String sessionId, String role, String content, String reasoning,
                        ToolInfo toolInfo, String toolResult, List<ToolCallData> toolCalls,
                        UsageInfo usage, List<WebSearchCallData> webSearchCall, List<CustomToolCallData> customToolCall,
-                       String conversationId, List<ImageContent> images, Boolean userInput);
+                       String conversationId, List<ImageContent> images);
 
     List<MessageDTO> getMessages(String sessionId);
 
@@ -38,6 +38,6 @@ public interface MessageDataProvider {
                       ToolInfo toolInfo, LocalDateTime createTime,
                       String toolResult, List<ToolCallData> toolCalls, UsageInfo usage,
                       Boolean rollback, List<WebSearchCallData> webSearchCall, List<CustomToolCallData> customToolCall,
-                      String conversationId, List<ImageContent> images, Boolean userInput) {
+                      String conversationId, List<ImageContent> images) {
     }
 }

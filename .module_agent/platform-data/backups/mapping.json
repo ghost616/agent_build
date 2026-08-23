@@ -20,5 +20,7 @@
   "platform-data/src/main/java/com/ghost616/platform/config/PrimarySchemaMigration.java": "5e69cf3d8c3e1bc1f76ac5209f69cbd6",
   "platform-app/src/test/java/com/ghost616/platform/migration/SchemaMigrationTest.java": "d5dc7d9d8506fe131d0115e9bfc9830d",
   "platform-data/src/main/resources/schema-message.sql": "70c0fa525cbdca5e09c0edfab4c383c5",
-  "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java": "3039fe137c3213b647b43461f3e0fc55"
+  "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java": "3039fe137c3213b647b43461f3e0fc55",
+  "platform-data/src/test/java/com/ghost616/platform/repository/MessageMapperTest.java": "7c774fe35341c0b762a63cd4cce1d367",
+  "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultMessageDataProviderTest.java": "9e6e131b1f17011e2e7d5031deb90158"
 }

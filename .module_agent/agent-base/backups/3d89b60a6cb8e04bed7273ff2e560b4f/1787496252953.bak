@@ -330,14 +330,13 @@ public class AgentContextManager {
                                  Boolean thinking, String conversationId, List<ImageContent> images) {
         sessionManager.messageSave().sessionId(childSessionId).role("user").content(content)
                 .images(images)
-                .userInput(false)
                 .conversationId(conversationId).save();
 
         addHistoryEntry(childSessionId, new AgentExecutionContext.HistoryEntry(
                 "user", content, null, null,
                 LocalDateTime.now(),
                 Collections.emptyList(),
-                null, null, null, images, false));
+                null, null, null, images));
 
         addLog(SendMessageLogData.builder()
                 .logLevel(LogLevel.INFO)
@@ -363,14 +362,13 @@ public class AgentContextManager {
      */
     private void sendParentMessage(String sessionId, String parentSessionId, String content, String conversationId) {
         sessionManager.messageSave().sessionId(parentSessionId).role("user").content(content)
-                .userInput(false)
                 .conversationId(conversationId).save();
 
         addHistoryEntry(parentSessionId, new AgentExecutionContext.HistoryEntry(
                 "user", content, null, null,
                 LocalDateTime.now(),
                 Collections.emptyList(),
-                null, null, null, null, false));
+                null, null, null, null));
 
         addLog(SendParentMessageLogData.builder()
                 .logLevel(LogLevel.INFO)
@@ -470,7 +468,7 @@ public class AgentContextManager {
                     msg.role(), msg.content(), msg.reasoning(), msg.toolInfo(),
                     msg.createTime(), Collections.unmodifiableList(toolCalls),
                     msg.usage(), toWebSearchCall(msg.webSearchCall()), toCustomToolCall(msg.customToolCall()),
-                    msg.images(), msg.userInput()));
+                    msg.images()));
         }
         return history;
     }

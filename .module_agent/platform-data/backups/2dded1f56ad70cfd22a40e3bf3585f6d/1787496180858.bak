@@ -49,9 +49,6 @@ public class Message {
     @TableField("rollback")
     private Boolean rollback;
 
-    @TableField("user_input")
-    private Boolean userInput;
-
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 }

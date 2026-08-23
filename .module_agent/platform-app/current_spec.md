@@ -276,3 +276,9 @@ platform-app 模块包含以下功能：
 - 消息图片映射（message_image 表）持久化链路：DefaultMessageDataProvider.saveMessage 新增 images 参数（List<ImageContent>，imgId/imgText），消息插入后逐条写入 MessageImage（messageId/imgId/imgText，依赖 platform-data 的 MessageImage 实体与 MessageImageMapper，@DS("message") 路由消息数据源）
 - 读取链路：getMessages/toMessageDTOs 按 messageId 联查 message_image 表，组装 List<ImageContent> 填充 MessageDTO.images；API 层映射 toSessionMessageDTO/toSessionMessageDTOs 同步透传 images 至 SessionMessageDTO.images，SessionController.getMessages/getMessagesBySeqRange 与 ConversationController 返回链路均携带图片信息（imgId 仅供前端后续调用接口获取图片信息，Controller 层暂不新增图片接口）
 - 回滚清理：rollbackToLastUserMessage 软回滚时按回滚消息 ID 集合删除对应 message_image 映射记录，与 message_tool_call 清理同步执行
+## 用户输入与会话消息区分
+
+- 用户输入与会话间传递 user 消息区分（user_input 字段）：DefaultMessageDataProvider.saveMessage 将 userInput 参数（Boolean）持久化到 message.user_input 列；getMessages/toMessageDTOs 回填 MessageDTO.userInput；toSessionMessageDTO/toSessionMessageDTOs 与 SessionMessageDTO 透传 userInput（前端暂不消费，Controller 未变更）
+- 回滚目标限定用户真实输入：rollbackToLastUserMessage 查询条件为 role='user' AND user_input=1（只回滚到用户真实输入，会话间传递的 user 消息不作为回滚锚点）
+- 记忆分组仅以用户真实输入为起点：SessionMemoryService.groupByUser 仅以 role='user' 且 user_input=true 的消息为组起点，user_input=false 的 user 消息（会话间传递）不产生新组、归入当前相邻组，聚合内容仍包含组内完整消息链（含 user_input=false 消息）；无 user_input=true 消息时不产生分组、跳过聚合
+- 记忆点统计（MessageMapper.countUserMessages/findNthUserSequenceNum）已在 platform-data 层按 user_input=1 过滤；历史折叠由 agent-base 层处理，platform-app 不涉及

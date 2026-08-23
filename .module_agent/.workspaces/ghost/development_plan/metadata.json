@@ -78,5 +78,29 @@
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
+  },
+  {
+    "plan_id": "plan_eeec79b6-45bc-4053-9703-6ca5b50e2b47",
+    "plan_summary": "区分用户输入与会话间传递的 user 消息——持久化层",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_17d1b096-2b82-4927-b763-77a003b8bc4b",
+    "plan_summary": "区分用户输入与会话间传递的 user 消息——userInput 字段贯通",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_27a8f3f0-afe6-4ab0-8429-82eb58a88684",
+    "plan_summary": "区分用户输入与会话间传递的 user 消息——持久化实现与业务逻辑",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
   }
 ]

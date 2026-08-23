@@ -67,7 +67,7 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
     public String saveMessage(String sessionId, String role, String content, String reasoning,
                                ToolInfo toolInfo, String toolResult, List<ToolCallData> toolCalls,
                                UsageInfo usage, List<WebSearchCallData> webSearchCall, List<CustomToolCallData> customToolCall,
-                               String conversationId, List<ImageContent> images, Boolean userInput) {
+                               String conversationId, List<ImageContent> images) {
         Long sid = IdConverter.parse(sessionId);
         Message message = new Message();
         message.setSessionId(sid);
@@ -78,7 +78,6 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
         message.setToolCallId(toolInfo != null ? toolInfo.toolCallId() : null);
         message.setToolResult(toolResult);
         message.setConversationId(conversationId);
-        message.setUserInput(userInput);
 
         LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Message::getSessionId, sid)
@@ -275,7 +274,7 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
                     msg.getReasoning(), buildToolInfo(msg, toolCalls),
                     msg.getCreateTime(), msg.getToolResult(), toolCallDataList, usageInfo,
                     msg.getRollback(), webSearchCallDataList, customToolCallDataList, msg.getConversationId(),
-                    images, msg.getUserInput()));
+                    images));
         }
 
         return result;
@@ -323,7 +322,6 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
                 .customToolCall(dto.customToolCall())
                 .conversationId(dto.conversationId())
                 .images(dto.images())
-                .userInput(dto.userInput())
                 .build();
     }
 
@@ -334,7 +332,6 @@ public class DefaultMessageDataProvider implements MessageDataProvider {
         wrapper.eq(Message::getSessionId, sid)
                 .eq(Message::getRollback, false)
                 .eq(Message::getRole, "user")
-                .eq(Message::getUserInput, true)
                 .orderByDesc(Message::getSequenceNum)
                 .last("LIMIT 1");
         Message lastUserMessage = messageMapper.selectOne(wrapper);

@@ -413,3 +413,11 @@ SubSessionOpenMode 枚举（com.ghost616.agentbase.enums.SubSessionOpenMode）�
 - AgentContextManager.sendUserMessage 私有方法新增 images 参数：messageSave().images(images) + HistoryEntry images；sendUserMessageCallback lambda 适配 5 参；convertMessagesToHistory 将 MessageDTO.images 透传 HistoryEntry；sendParentMessage 的 HistoryEntry images 传 null。
 - AgentMessageProxy.sendUserMessage/sendUserMessageToSession 新增 5 参重载（含 List<ImageContent> images），构建 dto/chat.ChatRequest 时透传 .images(images)；4 参旧签名保留并委托。
 - ToolExecutionService/MessageSavePostHook 构造 HistoryEntry 时 images 参数传 null（工具/助手消息无图片）。
+## 用户输入区分
+
+区分用户输入与会话间传递的 user 消息（userInput 字段贯通）：
+
+- 字段贯通：MessageDataProvider.saveMessage 接口与 MessageDTO record 末位新增 Boolean userInput；SessionManager.MessageSaveBuilder 新增 userInput(Boolean) 链式方法并在 save() 透传；dto/model.Message 新增 Boolean userInput（折叠分组判断用）；AgentExecutionContext.HistoryEntry record 末位新增 Boolean userInput；ChatService.buildMessageFromEntry 将 entry.userInput() 透传到模型 Message。
+- 保存区分：ChatService.chat() 保存用户消息传 userInput(true)（用户输入、评估重放、工具子会话经 chat 接口统一 true）；AgentContextManager.sendUserMessage（父→子 WEBSOCKET 推送）与 sendParentMessage（子→父回传）保存传 userInput(false)；ToolExecutionService/MessageSavePostHook 的 HistoryEntry userInput 传 null。dto/chat.ChatRequest 不加字段，AgentMessageProxy/ChildMessageEvent 不改（走 chat() 统一 true）。
+- 历史折叠分组边界：foldMessageGroups 由「user 角色」改为「user 角色且 user_input=true」作为折叠分组点（新增私有方法 isFoldGroupStart，Boolean.TRUE.equals(userInput) 判断）——user_input=false 的 user 消息不产生新组、归入相邻组，折叠计数（foldedCount）与展开索引（expandedIndices → buildHistoryGroupMessage）语义跟随新分组自动调整。
+- 持久化：platform-app DefaultMessageDataProvider.saveMessage 将 userInput 写入 message 实体（message.setUserInput），toMessageDTOs 回填 MessageDTO.userInput；持久层基础设施已就绪（message 表 user_input TINYINT(1) DEFAULT 1 列、Message 实体 userInput 字段、MessageSchemaMigration user_input 迁移、MessageMapper countUserMessages/findNthUserSequenceNum 按 user_input=1 过滤，回退与记忆点统计仅针对真实用户输入）。

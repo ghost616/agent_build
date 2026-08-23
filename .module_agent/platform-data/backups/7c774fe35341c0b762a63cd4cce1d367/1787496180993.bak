@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MessageMapperTest {
 
-    private static final String JDBC_URL = "jdbc:h2:mem:mapper_test;MODE=MySQL;DB_CLOSE_DELAY=-1";
+    private static final String JDBC_URL = "jdbc:h2:mem:mapper_test;DB_CLOSE_DELAY=-1";
 
     private SqlSessionFactory sqlSessionFactory;
 
@@ -42,7 +42,6 @@ class MessageMapperTest {
                         "tool_result VARCHAR(1000)," +
                         "token_usage VARCHAR(1000)," +
                         "rollback TINYINT NOT NULL DEFAULT 0," +
-                        "user_input TINYINT(1) DEFAULT 1," +
                         "conversation_id VARCHAR(50)," +
                         "create_time TIMESTAMP)");
             }
@@ -74,26 +73,6 @@ class MessageMapperTest {
                 ps.setInt(6, rollback);
                 ps.setString(7, conversationId);
                 ps.setString(8, createTime);
-                ps.executeUpdate();
-            }
-        }
-    }
-
-    private void insertMessageWithUserInput(long id, long sessionId, String role, int sequenceNum, int rollback,
-                                            int userInput, String conversationId, String createTime) throws Exception {
-        String sql = "INSERT INTO message (id, session_id, role, content, sequence_num, rollback, user_input, conversation_id, create_time) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(JDBC_URL, "sa", "")) {
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setLong(1, id);
-                ps.setLong(2, sessionId);
-                ps.setString(3, role);
-                ps.setString(4, "content-" + id);
-                ps.setInt(5, sequenceNum);
-                ps.setInt(6, rollback);
-                ps.setInt(7, userInput);
-                ps.setString(8, conversationId);
-                ps.setString(9, createTime);
                 ps.executeUpdate();
             }
         }
@@ -163,7 +142,6 @@ class MessageMapperTest {
         insertMessage(3, 100L, "user", 3, 0, "conv-1", "2026-01-01 10:00:02");
         insertMessage(4, 100L, "user", 4, 1, "conv-1", "2026-01-01 10:00:03");
         insertMessage(5, 200L, "user", 1, 0, "conv-2", "2026-01-01 10:00:04");
-        insertMessageWithUserInput(6, 100L, "user", 5, 0, 0, "conv-1", "2026-01-01 10:00:05");
 
         try (SqlSession session = sqlSessionFactory.openSession()) {
             MessageMapper mapper = session.getMapper(MessageMapper.class);
@@ -182,7 +160,6 @@ class MessageMapperTest {
         insertMessage(5, 100L, "user", 5, 1, "conv-1", "2026-01-01 10:00:04");
         insertMessage(6, 100L, "user", 7, 0, "conv-1", "2026-01-01 10:00:05");
         insertMessage(7, 100L, "user", 6, 0, "conv-1", "2026-01-01 10:00:06");
-        insertMessageWithUserInput(8, 100L, "user", 2, 0, 0, "conv-1", "2026-01-01 10:00:07");
 
         try (SqlSession session = sqlSessionFactory.openSession()) {
             MessageMapper mapper = session.getMapper(MessageMapper.class);

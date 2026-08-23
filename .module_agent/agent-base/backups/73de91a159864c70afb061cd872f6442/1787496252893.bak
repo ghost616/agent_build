@@ -33,7 +33,4 @@ public class Message {
 
     /** 图片列表（消息级，图片对象数组；imgId 仅供前端关联，不传给模型） */
     private List<ImageContent> images;
-
-    /** 是否为用户真实输入（true=用户输入，false=会话间传递如子会话/父会话推送；历史折叠分组判断用） */
-    private Boolean userInput;
 }

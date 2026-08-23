@@ -227,14 +227,14 @@ class ChatServiceTest {
         for (int g = 0; g < groupCount - 1; g++) {
             history.add(new AgentExecutionContext.HistoryEntry(
                     "user", "q" + g, null, null, java.time.LocalDateTime.now(),
-                    List.of(), null, null, null, null));
+                    List.of(), null, null, null, null, true));
             history.add(new AgentExecutionContext.HistoryEntry(
                     "assistant", "a" + g, null, null, java.time.LocalDateTime.now(),
-                    List.of(), null, null, null, null));
+                    List.of(), null, null, null, null, null));
         }
         history.add(new AgentExecutionContext.HistoryEntry(
                 "user", "hello", null, null, java.time.LocalDateTime.now(),
-                List.of(), null, null, null, null));
+                List.of(), null, null, null, null, true));
         return history;
     }
 
@@ -325,29 +325,29 @@ class ChatServiceTest {
                 .build();
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "q0", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "user", "q0", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
         history.add(new AgentExecutionContext.HistoryEntry(
-                "assistant", "a0", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "assistant", "a0", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "q1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "user", "q1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
         history.add(new AgentExecutionContext.HistoryEntry(
-                "assistant", "a1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "assistant", "a1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "q2", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "user", "q2", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
         history.add(new AgentExecutionContext.HistoryEntry(
                 "assistant", "调用工具", "reasoning_text", null, java.time.LocalDateTime.now(),
-                List.of(toolCall), null, null, null, null));
+                List.of(toolCall), null, null, null, null, null));
         history.add(new AgentExecutionContext.HistoryEntry(
                 "tool", "{\"temp\":25}", null, new ToolInfo("tc1", "get_weather"), java.time.LocalDateTime.now(),
-                List.of(), null, null, null, null));
+                List.of(), null, null, null, null, null));
         for (int g = 3; g < 13; g++) {
             history.add(new AgentExecutionContext.HistoryEntry(
-                    "user", "q" + g, null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                    "user", "q" + g, null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
             history.add(new AgentExecutionContext.HistoryEntry(
-                    "assistant", "a" + g, null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                    "assistant", "a" + g, null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, null));
         }
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
 
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, "[2]");
 
@@ -370,7 +370,7 @@ class ChatServiceTest {
 
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
@@ -389,7 +389,7 @@ class ChatServiceTest {
 
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "assistant", "a1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "assistant", "a1", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, null));
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
@@ -404,7 +404,7 @@ class ChatServiceTest {
 
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
@@ -420,7 +420,7 @@ class ChatServiceTest {
 
         List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
         history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null));
+                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
@@ -558,7 +558,7 @@ class ChatServiceTest {
                 ImageContent.builder().imgId("img-1").imgText("data:image/png;base64,AAA").build());
         AgentExecutionContext.HistoryEntry userEntry = new AgentExecutionContext.HistoryEntry(
                 "user", "看图", null, null, java.time.LocalDateTime.now(),
-                List.of(), null, null, null, images);
+                List.of(), null, null, null, images, true);
         ChatRequest request = ChatRequest.builder().sessionId(sessionId).content("看图").conversationId("conv-1").build();
         AgentContextManager.AgentSessionContext sessionCtx =
                 new AgentContextManager.AgentSessionContext(context, mutator, new java.util.concurrent.atomic.AtomicBoolean(false));
@@ -597,14 +597,14 @@ class ChatServiceTest {
         for (int g = 0; g < 12; g++) {
             history.add(new AgentExecutionContext.HistoryEntry(
                     "user", "q" + g, null, null, java.time.LocalDateTime.now(),
-                    List.of(), null, null, null, images));
+                    List.of(), null, null, null, images, true));
             history.add(new AgentExecutionContext.HistoryEntry(
                     "assistant", "a" + g, null, null, java.time.LocalDateTime.now(),
-                    List.of(), null, null, null, null));
+                    List.of(), null, null, null, null, null));
         }
         history.add(new AgentExecutionContext.HistoryEntry(
                 "user", "hello", null, null, java.time.LocalDateTime.now(),
-                List.of(), null, null, null, null));
+                List.of(), null, null, null, null, true));
 
         com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
 
@@ -620,5 +620,47 @@ class ChatServiceTest {
                 .findFirst().orElse(null);
         assertNotNull(q10, "近端区应保留 q10 完整消息");
         assertEquals(images, q10.getImages(), "近端区 user 消息应保留图片");
+    }
+
+    @Test
+    void fold_userInput为false的user消息不产生新组归入相邻组() {
+        List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
+        for (int g = 0; g < 12; g++) {
+            history.add(new AgentExecutionContext.HistoryEntry(
+                    "user", "u" + g, null, null, java.time.LocalDateTime.now(),
+                    List.of(), null, null, null, null, true));
+            history.add(new AgentExecutionContext.HistoryEntry(
+                    "assistant", "a" + g, null, null, java.time.LocalDateTime.now(),
+                    List.of(), null, null, null, null, null));
+            history.add(new AgentExecutionContext.HistoryEntry(
+                    "user", "child-" + g, null, null, java.time.LocalDateTime.now(),
+                    List.of(), null, null, null, null, false));
+            history.add(new AgentExecutionContext.HistoryEntry(
+                    "assistant", "ca" + g, null, null, java.time.LocalDateTime.now(),
+                    List.of(), null, null, null, null, null));
+        }
+        history.add(new AgentExecutionContext.HistoryEntry(
+                "user", "hello", null, null, java.time.LocalDateTime.now(),
+                List.of(), null, null, null, null, true));
+
+        com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
+
+        List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
+        long placeholderCount = contents.stream()
+                .filter(c -> c != null && c.contains("此为历史消息索引为"))
+                .count();
+        // 12 组真实用户输入（u0..u11）+ hello = 13 组，recentCount=3 → foldedCount=10
+        assertEquals(10, placeholderCount, "user_input=false 的 user 消息不应产生新组");
+        // 折叠区（组 0..9）中 user_input=false 的 child-* 消息应随组折叠，不单独出现
+        // （近端区组 10/11 的 child-10/child-11 属预期保留，不在此检查范围）
+        java.util.Set<String> foldedChildren = java.util.stream.IntStream.range(0, 10)
+                .mapToObj(g -> "child-" + g)
+                .collect(java.util.stream.Collectors.toSet());
+        assertFalse(contents.stream().filter(java.util.Objects::nonNull).anyMatch(foldedChildren::contains),
+                "折叠区 user_input=false 消息应归入相邻组并被折叠");
+        // 近端区（组 10..12）完整保留，含 user_input=false 消息
+        assertTrue(contents.contains("u10"), "近端区应保留真实用户输入消息");
+        assertTrue(contents.contains("child-10"), "近端区应保留 user_input=false 的 user 消息");
+        assertTrue(contents.contains("hello"), "近端区应保留最后一条用户输入");
     }
 }

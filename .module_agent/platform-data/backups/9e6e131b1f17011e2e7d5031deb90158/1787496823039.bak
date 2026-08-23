@@ -34,8 +34,6 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -276,53 +274,6 @@ class DefaultMessageDataProviderTest {
         assertThrows(BusinessException.class, () -> provider.rollbackToLastUserMessage("1"));
         verify(messageMapper, never()).rollbackBySessionIdAndGeSequenceNum(any(), any());
         verify(sessionMapper, never()).addTotalTokenUsed(anyLong(), anyLong());
-    }
-
-    @Test
-    void rollbackToLastUserMessage_查询条件仅定位userInput为true的user消息() {
-        Message userMsg = new Message();
-        userMsg.setId(5L);
-        userMsg.setSequenceNum(3);
-        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(userMsg);
-        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
-        when(messageMapper.rollbackBySessionIdAndGeSequenceNum(10L, 3)).thenReturn(0);
-
-        provider.rollbackToLastUserMessage("10");
-
-        ArgumentCaptor<LambdaQueryWrapper<Message>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
-        verify(messageMapper).selectOne(captor.capture());
-        LambdaQueryWrapper<Message> wrapper = captor.getValue();
-        String sql = wrapper.getSqlSegment();
-        assertTrue(sql.contains("user_input"), "回滚目标查询应包含 user_input 条件, 实际: " + sql);
-        assertTrue(wrapper.getParamNameValuePairs().containsValue(Boolean.TRUE),
-                "user_input 参数值应为 true, 实际: " + wrapper.getParamNameValuePairs());
-        assertTrue(sql.contains("role"), "回滚目标查询应包含 role 条件, 实际: " + sql);
-        assertTrue(wrapper.getParamNameValuePairs().containsValue("user"),
-                "role 参数值应为 user, 实际: " + wrapper.getParamNameValuePairs());
-    }
-
-    @Test
-    void rollbackToLastUserMessage_userInput为false的用户消息不作为回滚目标() {
-        Message passedUserMsg = new Message();
-        passedUserMsg.setId(7L);
-        passedUserMsg.setSequenceNum(4);
-        passedUserMsg.setUserInput(Boolean.FALSE);
-        when(messageMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(passedUserMsg);
-        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
-        when(messageMapper.rollbackBySessionIdAndGeSequenceNum(10L, 4)).thenReturn(0);
-
-        provider.rollbackToLastUserMessage("10");
-
-        ArgumentCaptor<LambdaQueryWrapper<Message>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
-        verify(messageMapper).selectOne(captor.capture());
-        LambdaQueryWrapper<Message> wrapper = captor.getValue();
-        String sql = wrapper.getSqlSegment();
-        // 解析 user_input 条件对应的参数名（如 MPGENVAL4），断言其值为 true
-        Matcher m = Pattern.compile("user_input = #\\{ew\\.paramNameValuePairs\\.([^}]+)}").matcher(sql);
-        assertTrue(m.find(), "回滚目标查询应包含 user_input 条件, 实际: " + sql);
-        String paramKey = m.group(1);
-        assertEquals(Boolean.TRUE, wrapper.getParamNameValuePairs().get(paramKey),
-                "user_input 参数值应为 true（只回滚到用户真实输入）, 实际: " + wrapper.getParamNameValuePairs());
     }
 
     @Test
@@ -835,7 +786,7 @@ class DefaultMessageDataProviderTest {
                 new CustomToolCallData("item-2", 1, "in", "out"));
 
         provider.saveMessage("1", "assistant", "multi", null, null, null, toolCalls, null,
-                webSearchCall, customToolCall, null, null, null);
+                webSearchCall, customToolCall, null, null, null, null);
 
         verify(messageToolCallService, times(1)).saveBatch(batchCaptor.capture());
         List<MessageToolCall> captured = batchCaptor.getValue();
@@ -1264,7 +1215,6 @@ class DefaultMessageDataProviderTest {
         msg.setToolCallId("call-1");
         msg.setCreateTime(LocalDateTime.of(2026, 1, 1, 0, 0));
         msg.setToolResult("result");
-        msg.setUserInput(Boolean.TRUE);
 
         MessageToolCall mtc = new MessageToolCall();
         mtc.setToolCallId("call-1");
@@ -1299,24 +1249,6 @@ class DefaultMessageDataProviderTest {
         assertEquals(1, dto.getImages().size());
         assertEquals("img-1", dto.getImages().get(0).getImgId());
         assertEquals("data:image/png;base64,AAA", dto.getImages().get(0).getImgText());
-        assertEquals(Boolean.TRUE, dto.getUserInput());
-    }
-
-    @Test
-    void toSessionMessageDTOs_userInput为null_透传null() {
-        Message msg = new Message();
-        msg.setId(8L);
-        msg.setSessionId(40L);
-        msg.setRole("user");
-        msg.setContent("hi");
-        msg.setSequenceNum(10);
-        msg.setCreateTime(LocalDateTime.now());
-        when(messageToolCallMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
-        when(messageImageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(Collections.emptyList());
-
-        SessionMessageDTO dto = provider.toSessionMessageDTOs(List.of(msg)).get(0);
-
-        assertNull(dto.getUserInput());
     }
 
     @Test

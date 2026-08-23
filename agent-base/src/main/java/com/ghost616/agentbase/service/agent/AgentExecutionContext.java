@@ -226,7 +226,8 @@ public class AgentExecutionContext {
     public record HistoryEntry(String role, String content, String reasoning, ToolInfo toolInfo,
                                LocalDateTime createTime, List<ToolCall> toolCalls,
                                UsageInfo usage, List<WebSearchCall> webSearchCall,
-                               List<CustomToolCall> customToolCall, List<ImageContent> images) {
+                               List<CustomToolCall> customToolCall, List<ImageContent> images,
+                               Boolean userInput) {
     }
 
     public static class AgentContextMutator {

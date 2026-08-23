@@ -11,7 +11,7 @@
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/entity/Message.java",
-      "description": "消息实体（message 表），不继承 BaseEntity，含雪花ID、会话ID、角色、内容、推理、序号、工具调用ID、工具结果、创建时间、userId（归属用户）"
+      "description": "消息实体（message 表），不继承 BaseEntity，含雪花ID、会话ID、角色、内容、推理、序号、工具调用ID、工具结果、创建时间、userId（归属用户）、userInput（Boolean，@TableField(\"user_input\")，标识是否为用户输入型消息，默认 1 存量视为用户输入）"
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/entity/AgentConfig.java",
@@ -67,7 +67,7 @@
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/repository/MessageMapper.java",
-      "description": "MyBatis-Plus 消息数据访问层，继承 BaseMapper<Message>，提供按 sessionId 和 sequenceNum 批量设置 rollback=1 的自定义方法，按 conversationId 查询未回滚消息（rollback=0，按 create_time 升序）的 selectByConversationId 方法，countUserMessages 统计会话下 user 角色未回滚消息总数，findNthUserSequenceNum 查找会话内第 n 个 user 未回滚消息的 sequenceNum（按 sequence_num 升序，LIMIT 1 OFFSET n）；标注 @DS(\"message\") 注解路由至副数据源"
+      "description": "MyBatis-Plus 消息数据访问层，继承 BaseMapper<Message>，提供按 sessionId 和 sequenceNum 批量设置 rollback=1 的自定义方法，按 conversationId 查询未回滚消息（rollback=0，按 create_time 升序）的 selectByConversationId 方法，countUserMessages 统计会话下 user 角色未回滚且 user_input=1（用户输入型）消息总数，findNthUserSequenceNum 查找会话内第 n 个 user 未回滚且 user_input=1 消息的 sequenceNum（按 sequence_num 升序，LIMIT 1 OFFSET n）；标注 @DS(\"message\") 注解路由至副数据源"
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/repository/AgentConfigMapper.java",
@@ -227,11 +227,11 @@
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java",
-      "description": "消息数据源 Schema 迁移组件（@Component @Order(1)），注入 @Qualifier(\"messageJdbcTemplate\") 的 JdbcTemplate，通过 ScriptUtils 执行 classpath 下 schema-message.sql 建 message/agent_log/message_tool_call/message_image 四表；建表失败时抛 IllegalStateException fail-fast 终止启动；再执行四表 14 条 ALTER TABLE 增量列迁移（message.tool_result/token_usage/conversation_id/rollback、agent_log.session_variables/conversation_variables、message_tool_call.type/web_search_call/custom_tool_call、message.user_id/agent_log.user_id、message_image.message_id/img_id/img_text）"
+      "description": "消息数据源 Schema 迁移组件（@Component @Order(1)），注入 @Qualifier(\"messageJdbcTemplate\") 的 JdbcTemplate，通过 ScriptUtils 执行 classpath 下 schema-message.sql 建 message/agent_log/message_tool_call/message_image 四表；建表失败时抛 IllegalStateException fail-fast 终止启动；再执行四表 15 条 ALTER TABLE 增量列迁移（message.tool_result/token_usage/conversation_id/rollback/user_input、agent_log.session_variables/conversation_variables、message_tool_call.type/web_search_call/custom_tool_call、message.user_id/agent_log.user_id、message_image.message_id/img_id/img_text）"
     },
     {
       "path": "platform-data/src/main/resources/schema-message.sql",
-      "description": "消息数据源 DDL 初始化脚本，含 message、agent_log、message_tool_call、message_image 四张表的建表语句和索引（message_tool_call 含 message_id/tool_call_id 索引，message_image 含 message_id 索引）；message 与 agent_log 表含 user_id BIGINT DEFAULT 1 列；由 MessageSchemaMigration 在消息数据源上执行，确保四表齐全"
+      "description": "消息数据源 DDL 初始化脚本，含 message、agent_log、message_tool_call、message_image 四张表的建表语句和索引（message_tool_call 含 message_id/tool_call_id 索引，message_image 含 message_id 索引）；message 与 agent_log 表含 user_id BIGINT DEFAULT 1 列，message 表含 user_input TINYINT(1) DEFAULT 1 列（区分用户输入与会话间传递的 user 消息，存量默认视为用户输入）；由 MessageSchemaMigration 在消息数据源上执行，确保四表齐全"
     },
     {
       "path": "platform-data/src/test/java/com/ghost616/platform/MessageToolCallSchemaTest.java",
@@ -256,6 +256,10 @@
     {
       "path": "platform-data/src/test/java/com/ghost616/platform/MessageImageSchemaTest.java",
       "description": "消息图片映射表 Schema 测试，验证 schema.sql 不含 message_image、schema-message.sql 含 message_image 建表语句与 message_id 索引、schema-message.sql 在 H2 可执行并建成 message_image 表、MessageImageMapper 标注 @DS(\"message\") 且继承 BaseMapper、MessageImage 实体含 @TableName 及三个字段映射注解、MessageSchemaMigration 含 message_image 三条迁移条目"
+    },
+    {
+      "description": "MessageMapper 的 MyBatis 集成测试（H2 内存库 + 原生 MyBatis SqlSession），覆盖 rollbackBySessionIdAndGeSequenceNum/selectByConversationId/countUserMessages/findNthUserSequenceNum；其中 countUserMessages 与 findNthUserSequenceNum 验证 user_input=1 过滤（仅统计用户输入型 user 消息）",
+      "path": "platform-data/src/test/java/com/ghost616/platform/repository/MessageMapperTest.java"
     }
   ]
 }
