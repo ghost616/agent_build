@@ -126,5 +126,13 @@
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
+  },
+  {
+    "plan_id": "plan_76c1acba-110d-4538-b8ca-bf2516981dc4",
+    "plan_summary": "修复子会话标签页历史与流式消息合并重复展示",
+    "starter_session_id": "session-b9dd66d4-5ca6-438c-9ca2-26191ca2532f",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
   }
 ]

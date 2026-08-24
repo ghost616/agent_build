@@ -139,34 +139,6 @@ function mapSessionMessages(historyMessages: SessionMessage[]): ChatMessage[] {
   });
 }
 
-/**
- * 提取工具消息内容中的参数段（JSON），用于子会话历史与流式工具消息的内容级去重。
- * 前端流式工具消息为「正在执行工具 + 参数」，后端历史工具消息为「工具 + 参数 + 执行结果」，
- * 两者格式不同但参数段一致，可据此判定为同一消息。
- * @param content 工具消息内容
- * @returns 参数 JSON 字符串（无参数段时返回空字符串）
- */
-function extractToolArguments(content: string): string {
-  const match = content.match(/\*\*参数:\*\*\n```json\n([\s\S]*?)\n```/);
-  return match ? match[1] : '';
-}
-
-/**
- * 判断两条聊天消息是否为同一消息（内容级去重判定）：
- * 普通消息按 role + content + reasoning 全等匹配；工具消息因前后端格式不同按 role + 参数段匹配。
- * @param a 消息 A
- * @param b 消息 B
- * @returns 是否视为同一消息
- */
-function isSameMessage(a: ChatMessage, b: ChatMessage): boolean {
-  if (a.role !== b.role) return false;
-  if (a.role === 'tool') {
-    const argsA = extractToolArguments(a.content);
-    return argsA !== '' && argsA === extractToolArguments(b.content);
-  }
-  return a.content === b.content && (a.reasoning ?? undefined) === (b.reasoning ?? undefined);
-}
-
 const renderRoleHeader = (role: MessageRole): JSX.Element => {
   const config = ROLE_CONFIG[role];
   return (
@@ -296,21 +268,23 @@ function ChildSessionView({
     };
   }, [childId]);
 
-  // 合并历史消息与实时流式消息：以 history（messages）为主，遍历 stream.messages 与 history 按内容
-  // （role + content，可含 reasoning；工具消息按参数段）去重——history 中已存在的消息不追加，
-  // 仅追加 history 中没有的最新消息。子会话执行完成后 stream 消息全部去重、只展示 history；
-  // 执行中切换标签展示 history + 不重复的最新增量。
+  // 合并历史消息与实时流式消息：历史最后一条与流式首条用户消息相同时去重，避免重复展示
   const mergedMessages = useMemo(() => {
     if (!stream || stream.messages.length === 0) {
       return messages;
     }
-    const merged = [...messages];
-    for (const streamMsg of stream.messages) {
-      if (!merged.some((m) => isSameMessage(m, streamMsg))) {
-        merged.push(streamMsg);
-      }
+    const history = [...messages];
+    const last = history[history.length - 1];
+    const firstStream = stream.messages[0];
+    if (
+      last &&
+      last.role === 'user' &&
+      firstStream.role === 'user' &&
+      last.content === firstStream.content
+    ) {
+      history.pop();
     }
-    return merged;
+    return [...history, ...stream.messages];
   }, [messages, stream]);
 
   // 消息或流式状态（回复/推理/工具执行/加载）变化时自动滚动到底部，与主会话容器滚动行为一致

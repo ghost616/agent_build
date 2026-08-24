@@ -73,6 +73,7 @@
 - AgentChat 子会话标签缺失处理与切换：执行前检查直接父会话子列表（childListCacheRef[parentId||sessionId]）是否含对应子会话，缺失时 ensureChildList(parentId, true) 强制刷新补出标签（刷新失败忽略继续执行），两种触发均适用；工具触发开始自动切换路径标签 setActivePath([sessionId, childId])、结束（含失败）自动切回主会话 setActivePath([sessionId])，WS 触发不自动切回（路径标签由 WS 按父会话链展开）；子会话流程失败时标签内保留已产生的过程消息并通过 error 字段提示错误
 - AgentChat 子会话标签自动滚动：ChildSessionView 滚动容器（overflowY:auto div）添加 childContainerRef；useEffect 监听 mergedMessages 与 stream 的 currentResponse/currentReasoning/toolExecuting/loading 变化，内容变化时 scrollTop = scrollHeight 自动滚动到底部（与主会话 containerRef 自动滚动行为一致）
 - AgentChat 计数标签路径项化：计数标签（Dropdown+数量+上下箭头）不再使用 tabBarExtraContent={{ right: countTabNode }}，改为 Tabs items 中的路径项——sessionTabItems 由 activePath.flatMap 构建，每个层级标签后紧跟其下一级计数标签项（key 为 `${sid}-count`，数据取 childListCache[sid]，无子会话时不插入），点击计数标签仅展开下拉不切换内容区（handleTabChange 对 `-count` key 直接 return），保持路径式导航视觉 [主会话] [▾ 3] [子会话A] [▾ 2] [孙会话B]；.agent-chat-count-tab 样式与 Tabs 标签视觉一致（贴紧、同高、无多余边距：去掉固定 height/边框/背景，margin 0，并用 .agent-chat-tabs .ant-tabs-tab:has(.agent-chat-count-tab) 覆盖 antd 默认 tab 间距为 4px）
+- 子会话标签页合并展示修复：ChildSessionView 的 mergedMessages 由「历史末条与流式首条相同 user 消息 pop」单一去重重构为内容级去重——以 history（messages）为主，遍历 stream.messages 用模块级 isSameMessage 判定（普通消息按 role + content + reasoning 全等匹配；tool 消息因前后端格式不同——前端流式为「正在执行工具 + 参数」、后端历史为「工具 + 参数 + 执行结果」——按 role + 参数段 extractToolArguments 匹配），与 history 已存在的消息不追加、仅追加 history 中没有的最新消息（子会话执行完成后 stream 消息全部去重、只展示 history；执行中切换标签展示 history + 不重复的最新增量）；流式实时增量（currentResponse/currentReasoning/toolExecuting）展示逻辑不变
 ## 技能管理界面
 
 - 技能配置管理页面 `/skills`，支持技能列表展示、搜索筛选、新增/编辑/删除/启用禁用

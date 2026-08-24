@@ -35,6 +35,10 @@
     {
       "content": "评估执行前台模式 Bug：WS 触发的子会话执行（streamChildReply → handleSubSessionFlow fromWs）与子→主回传续接（onSessionMessage → continueEvaluationChat）为 fire-and-forget（void 异步），主流程 execute 不等待其完成，导致子会话未执行完就直接生成评估结果。修复：跟踪 WS 触发的异步活动（pendingAsyncRef 集合），主流程在每条消息处理后与生成评估结果前等待全部异步活动完成（含嵌套新增）。",
       "timestamp": "2026-08-23T12:27:56.910Z"
+    },
+    {
+      "content": "AgentChat 子会话页 Bug：父会话收到子会话返回信息后，用户切换到子会话标签页，ChildSessionView 加载后端历史（getSessionMessages）与 childStreams[childId]（stream.messages，子会话执行完成后仍保留完整对话）合并展示时重复——mergedMessages = history + stream.messages 内容重叠导致两份一样的数据。现有去重仅处理\"history 最后一条与 stream 首条 user 相同\"，不覆盖完整重叠。修复（方案 B）：合并逻辑以 history 为主，stream.messages 中与 history 按内容匹配重复的消息不追加，仅追加 history 中不存在的最新消息。",
+      "timestamp": "2026-08-24T12:51:44.434Z"
     }
   ]
 }
