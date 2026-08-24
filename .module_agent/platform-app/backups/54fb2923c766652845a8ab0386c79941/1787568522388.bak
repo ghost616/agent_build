@@ -79,9 +79,8 @@ public class SessionController {
     }
 
     @GetMapping("/{id}/messages")
-    public ApiResponse<List<SessionMessageDTO>> getMessages(@PathVariable Long id,
-                                                            @RequestParam(required = false) Boolean userInput) {
-        List<SessionMessageDTO> result = sessionService.getMessages(id, userInput);
+    public ApiResponse<List<SessionMessageDTO>> getMessages(@PathVariable Long id) {
+        List<SessionMessageDTO> result = sessionService.getMessages(id);
         return ApiResponse.success(result);
     }
 

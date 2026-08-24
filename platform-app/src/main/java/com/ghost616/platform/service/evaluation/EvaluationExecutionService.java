@@ -192,6 +192,7 @@ public class EvaluationExecutionService {
                 String.valueOf(benchmarkSessionId));
         List<MessageDataProvider.MessageDTO> userMessages = benchmarkMessages.stream()
                 .filter(m -> "user".equals(m.role()))
+                .filter(m -> Boolean.TRUE.equals(m.userInput()))
                 .filter(m -> m.rollback() == null || !m.rollback())
                 .toList();
         if (userMessages.isEmpty()) {

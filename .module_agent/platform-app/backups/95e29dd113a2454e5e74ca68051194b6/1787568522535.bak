@@ -1,8 +1,10 @@
 package com.ghost616.platform.service.evaluation;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.ghost616.agentbase.enums.ErrorCode;
-import com.ghost616.agentbase.exception.BusinessException;
+import com.ghost616.agentbase.core.ThreadVariableHandler;
+import com.ghost616.agentbase.core.ThreadVariableWrapper;
+import com.ghost616.platform.enums.ErrorCode;
+import com.ghost616.platform.exception.BusinessException;
 import com.ghost616.agentbase.service.agent.MessageDataProvider;
 import com.ghost616.platform.dto.evaluation.EvaluationExecutionStatusDTO;
 import com.ghost616.platform.entity.Evaluation;
@@ -13,6 +15,7 @@ import com.ghost616.platform.repository.EvaluationMapper;
 import com.ghost616.platform.repository.SessionMapper;
 import com.ghost616.platform.repository.SessionSkillMapper;
 import com.ghost616.platform.repository.SessionToolMapper;
+import com.ghost616.platform.service.agent.DefaultChatDataCacheProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,6 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class EvaluationExecutionService {
 
+    public record ExecutionSessionContext(Long sessionId, List<MessageDataProvider.MessageDTO> userMessages) {}
+
     private static final long STATUS_TTL_MS = 3_600_000;
 
     private final EvaluationMapper evaluationMapper;
@@ -36,9 +41,14 @@ public class EvaluationExecutionService {
     private final MessageDataProvider messageDataProvider;
     private final EvaluationResultGenerateService evaluationResultGenerateService;
     private final AsyncEvaluationExecutor asyncEvaluationExecutor;
+    private final DefaultChatDataCacheProvider defaultChatDataCacheProvider;
+    private final ThreadVariableHandler threadVariableHandler;
 
     private final Map<String, EvaluationExecutionStatusDTO> executionStatusMap = new ConcurrentHashMap<>();
     private final Map<String, Long> statusTimestamps = new ConcurrentHashMap<>();
+
+    private final Map<String, EvaluationExecutionStatusDTO> generateStatusMap = new ConcurrentHashMap<>();
+    private final Map<String, Long> generateStatusTimestamps = new ConcurrentHashMap<>();
 
     public EvaluationExecutionStatusDTO execute(Long evaluationId) {
         Evaluation evaluation = evaluationMapper.selectById(evaluationId);
@@ -51,15 +61,7 @@ public class EvaluationExecutionService {
             throw new BusinessException(ErrorCode.EVALUATION_NOT_FOUND);
         }
 
-        List<MessageDataProvider.MessageDTO> benchmarkMessages = messageDataProvider.getMessages(
-                String.valueOf(benchmarkSessionId));
-        List<MessageDataProvider.MessageDTO> userMessages = benchmarkMessages.stream()
-                .filter(m -> "user".equals(m.role()))
-                .toList();
-
-        if (userMessages.isEmpty()) {
-            throw new BusinessException(ErrorCode.EVALUATION_BENCHMARK_NO_USER_MESSAGE);
-        }
+        List<MessageDataProvider.MessageDTO> userMessages = getBenchmarkUserMessages(benchmarkSessionId);
 
         Session executionSession = copyBenchmarkSession(benchmarkSessionId);
 
@@ -74,7 +76,34 @@ public class EvaluationExecutionService {
         executionStatusMap.put(statusKey, statusDTO);
         statusTimestamps.put(statusKey, System.currentTimeMillis());
 
-        asyncEvaluationExecutor.executeAsync(evaluationId, executionSession.getId(), userMessages, executionStatusMap);
+        ThreadVariableWrapper threadVariableWrapper = threadVariableHandler.wrap();
+        asyncEvaluationExecutor.executeAsync(evaluationId, executionSession, userMessages, executionStatusMap,
+                threadVariableWrapper);
+
+        String sessionId = String.valueOf(executionSession.getId());
+        String cacheId = null;
+        while (true) {
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            EvaluationExecutionStatusDTO current = executionStatusMap.get(statusKey);
+            if (current != null && "FAILED".equals(current.getStatus())) {
+                return current;
+            }
+            if (cacheId == null) {
+                List<String> cacheIds = defaultChatDataCacheProvider.getCacheIdsBySessionId(sessionId);
+                if (cacheIds.isEmpty()) {
+                    continue;
+                }
+                cacheId = cacheIds.get(0);
+            }
+            if (defaultChatDataCacheProvider.getMaxChunkIndex(cacheId) > 0) {
+                break;
+            }
+        }
 
         return statusDTO;
     }
@@ -88,7 +117,7 @@ public class EvaluationExecutionService {
         return dto;
     }
 
-    public Long createExecutionSession(Evaluation evaluation) {
+    public ExecutionSessionContext createExecutionSession(Evaluation evaluation) {
         if (evaluation == null) {
             throw new BusinessException(ErrorCode.EVALUATION_NOT_FOUND);
         }
@@ -98,27 +127,45 @@ public class EvaluationExecutionService {
             throw new BusinessException(ErrorCode.EVALUATION_NOT_FOUND);
         }
 
-        List<MessageDataProvider.MessageDTO> benchmarkMessages = messageDataProvider.getMessages(
-                String.valueOf(benchmarkSessionId));
-        List<MessageDataProvider.MessageDTO> userMessages = benchmarkMessages.stream()
-                .filter(m -> "user".equals(m.role()))
-                .toList();
-
-        if (userMessages.isEmpty()) {
-            throw new BusinessException(ErrorCode.EVALUATION_BENCHMARK_NO_USER_MESSAGE);
-        }
+        List<MessageDataProvider.MessageDTO> userMessages = getBenchmarkUserMessages(benchmarkSessionId);
 
         Session executionSession = copyBenchmarkSession(benchmarkSessionId);
-        return executionSession.getId();
+        return new ExecutionSessionContext(executionSession.getId(), userMessages);
     }
 
-    public Long createExecutionSession(Long evaluationId) {
+    public ExecutionSessionContext createExecutionSession(Long evaluationId) {
         Evaluation evaluation = evaluationMapper.selectById(evaluationId);
         return createExecutionSession(evaluation);
     }
 
     public void generateResult(Long evaluationId, Long executionSessionId) {
         evaluationResultGenerateService.generate(evaluationId, executionSessionId);
+    }
+
+    public EvaluationExecutionStatusDTO generateResultAsync(Long evaluationId, Long executionSessionId) {
+        String statusKey = evaluationId + ":" + executionSessionId;
+        EvaluationExecutionStatusDTO statusDTO = EvaluationExecutionStatusDTO.builder()
+                .evaluationId(evaluationId)
+                .executionSessionId(executionSessionId)
+                .status("RUNNING")
+                .build();
+        generateStatusMap.put(statusKey, statusDTO);
+        generateStatusTimestamps.put(statusKey, System.currentTimeMillis());
+
+        ThreadVariableWrapper threadVariableWrapper = threadVariableHandler.wrap();
+        asyncEvaluationExecutor.generateResultAsync(evaluationId, executionSessionId, generateStatusMap,
+                threadVariableWrapper);
+
+        return statusDTO;
+    }
+
+    public EvaluationExecutionStatusDTO getGenerateStatus(Long evaluationId, Long executionSessionId) {
+        String statusKey = evaluationId + ":" + executionSessionId;
+        EvaluationExecutionStatusDTO dto = generateStatusMap.get(statusKey);
+        if (dto == null) {
+            throw new BusinessException(ErrorCode.EVALUATION_EXECUTION_STATUS_NOT_FOUND);
+        }
+        return dto;
     }
 
     @Scheduled(fixedRate = 300_000)
@@ -131,6 +178,26 @@ public class EvaluationExecutionService {
             }
             return false;
         });
+        generateStatusTimestamps.entrySet().removeIf(entry -> {
+            if (now - entry.getValue() > STATUS_TTL_MS) {
+                generateStatusMap.remove(entry.getKey());
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private List<MessageDataProvider.MessageDTO> getBenchmarkUserMessages(Long benchmarkSessionId) {
+        List<MessageDataProvider.MessageDTO> benchmarkMessages = messageDataProvider.getMessages(
+                String.valueOf(benchmarkSessionId));
+        List<MessageDataProvider.MessageDTO> userMessages = benchmarkMessages.stream()
+                .filter(m -> "user".equals(m.role()))
+                .filter(m -> m.rollback() == null || !m.rollback())
+                .toList();
+        if (userMessages.isEmpty()) {
+            throw new BusinessException(ErrorCode.EVALUATION_BENCHMARK_NO_USER_MESSAGE);
+        }
+        return userMessages;
     }
 
     private Session copyBenchmarkSession(Long benchmarkSessionId) {
@@ -144,6 +211,7 @@ public class EvaluationExecutionService {
         newSession.setModelId(benchmarkSession.getModelId());
         newSession.setTitle(benchmarkSession.getTitle() + "_exec");
         newSession.setSystemPrompt(benchmarkSession.getSystemPrompt());
+        newSession.setThinking(benchmarkSession.getThinking());
         newSession.setIsEvaluation(true);
         sessionMapper.insert(newSession);
 

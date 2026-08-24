@@ -27,15 +27,6 @@ public interface SessionService {
 
     List<SessionMessageDTO> getMessages(Long sessionId);
 
-    /**
-     * 查询指定会话的消息列表，支持按用户真实输入过滤。
-     *
-     * @param sessionId 会话 ID
-     * @param userInput 可选过滤参数：null/不传返回全部消息；传 true 时仅返回 role='user' 且 user_input=true 的 user 消息
-     * @return 消息 DTO 列表
-     */
-    List<SessionMessageDTO> getMessages(Long sessionId, Boolean userInput);
-
     List<SessionMessageDTO> getMessagesByConversationId(String conversationId);
 
     int rollback(Long sessionId);

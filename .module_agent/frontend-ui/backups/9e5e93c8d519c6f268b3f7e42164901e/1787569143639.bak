@@ -27,21 +27,6 @@ describe('ConversationDetail 对话详情 (静态验证)', () => {
     expect(source).toContain("<Tag");
   });
 
-  it('role=\'user\' 且 userInput===false 的消息应以「传递」标签替代「用户」标签', () => {
-    const source = readFileSync(pagePath, 'utf-8');
-    expect(source).toContain("PASS_THROUGH_LABEL");
-    expect(source).toContain("text: '传递'");
-    expect(source).toContain("color: 'orange'");
-    expect(source).toContain("msg.role === 'user' && msg.userInput === false");
-  });
-
-  it('resolveRoleLabel 应同时被表格角色列与消息流 Modal 使用', () => {
-    const source = readFileSync(pagePath, 'utf-8');
-    expect(source).toContain('resolveRoleLabel');
-    expect(source).toContain('resolveRoleLabel(msg)');
-    expect(source).toContain('resolveRoleLabel(record)');
-  });
-
   it('应展示内容与时间列', () => {
     const source = readFileSync(pagePath, 'utf-8');
     expect(source).toContain("dataIndex: 'content'");

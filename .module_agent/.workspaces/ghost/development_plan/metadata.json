@@ -102,5 +102,29 @@
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
+  },
+  {
+    "plan_id": "plan_76379620-92f1-4513-a5db-3bad5abc171c",
+    "plan_summary": "userInput 接口与业务逻辑完善",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_088f9d7a-2477-4927-857d-6d990d1cbf69",
+    "plan_summary": "userInput 保存语义修正——assistant/tool 消息显式 false",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_26433562-1eb7-4201-bb8e-6127bc71bf38",
+    "plan_summary": "userInput 前端支持——用户消息列表与传递标签",
+    "starter_session_id": "f3b30f44-faae-4a37-a3d2-c2540b459da2",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
   }
 ]

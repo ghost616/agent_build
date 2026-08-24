@@ -57,8 +57,6 @@ export interface SessionMessage {
   sessionId: string;
   conversationId?: string;
   role: string;
-  /** 是否为用户真实输入（false 表示会话间传递的消息，如子会话/父会话推送）。 */
-  userInput?: boolean;
   content: string;
   reasoning?: string;
   toolResult?: string;

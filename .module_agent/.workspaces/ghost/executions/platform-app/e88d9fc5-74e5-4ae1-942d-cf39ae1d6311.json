@@ -22,5 +22,22 @@
     ],
     "summary": "执行总结：本轮完成用户输入（userInput）持久化与业务逻辑的 service 层实现。核查确认 saveMessage 持久化 userInput、getMessages/toMessageDTOs 回填 MessageDTO.userInput 已实现（未提交工作）；本次补齐剩余缺口——1) SessionMessageDTO 新增 userInput 字段（Boolean），DefaultMessageDataProvider.toSessionMessageDTO 增加 .userInput(dto.userInput()) 透传，使 SessionController/ConversationController 返回链路携带 userInput（前端暂不消费，未动 Controller）；2) rollbackToLastUserMessage 回滚锚点查询追加 .eq(Message::getUserInput, true)，回滚目标限定 role='user' AND user_input=1（只回滚到用户真实输入，会话间传递的 user 消息不作为锚点）；3) SessionMemoryService.groupByUser 改为仅以 role='user' 且 user_input=true 的消息为组起点（user_input=false 归入相邻组、不产生虚假分组），聚合内容仍含组内完整消息链；4) 测试同步：DefaultMessageDataProviderTest 更新 toSessionMessageDTOs userInput 断言、新增 userInput 为 null 透传用例、rollback 查询 wrapper 条件断言用例（user_input=true / 非 false 目标）；SessionMemoryServiceTest 扩展 message() 辅助方法（新增 userInput 参数重载，user 角色默认 true）、新增 3 个用例（user_input=false 合并相邻组、归类失败降级含传递消息、无 user_input=true 跳过聚合）。记忆点统计（countUserMessages/findNthUserSequenceNum）已在 platform-data 层按 user_input=1 过滤，历史折叠由 agent-base 处理，本模块未涉及。\n\n测试总结：全部测试通过。编译测试通过（mvn -B clean test -pl platform-app -am，5 模块 BUILD SUCCESS，release 17，含 agent-base 120 主类 + 58 测试类全量编译）；单元测试 99/99 通过（DefaultMessageDataProviderTest 58 + SessionMemoryServiceTest 41），Failures 0、Errors 0、Skipped 0。关键验证点：toSessionMessageDTO 透传 userInput（true/null 两种）、rollback 锚点 wrapper 含 user_input=true（非 false 目标）、groupByUser 对 user_input=false 合并相邻组且聚合内容含完整消息链、无 user_input=true 时跳过聚合。接口/E2E 测试因仅 service 层、无 Controller/UI 变更不适用。无环境问题，无需修复项。建议后续走查 saveMessage 的 userInput 入参来源（SessionManager 侧）确认调用点语义，属下一步联调范围。",
     "errors": []
+  },
+  {
+    "plan_id": "plan_76379620-92f1-4513-a5db-3bad5abc171c",
+    "plan": "userInput 接口与业务逻辑完善",
+    "modified_files": [
+      "platform-app/src/main/java/com/ghost616/platform/service/session/SessionService.java",
+      "platform-app/src/main/java/com/ghost616/platform/service/session/SessionServiceImpl.java",
+      "platform-app/src/main/java/com/ghost616/platform/controller/SessionController.java",
+      "platform-app/src/main/java/com/ghost616/platform/service/evaluation/EvaluationExecutionService.java",
+      "platform-app/src/main/java/com/ghost616/platform/service/memory/MemoryQueryProviderImpl.java",
+      "platform-app/src/test/java/com/ghost616/platform/session/SessionServiceImplTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/controller/SessionControllerTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/evaluation/EvaluationExecutionServiceTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/memory/MemoryQueryProviderImplTest.java"
+    ],
+    "summary": "执行总结：本轮完成 userInput 接口与业务逻辑完善（9 个文件）。1) SessionService 新增 getMessages(Long sessionId, Boolean userInput) 重载，SessionServiceImpl 实现过滤——userInput 为 null/不传返回全部消息（单参 getMessages(Long) 委托双参 null 版本，向后兼容），传 true 时先经 messageService.getAllMessages 全量查询后按 role='user' 且 user_input=true 内存过滤，再经 defaultMessageDataProvider.toSessionMessageDTOs 返回；SessionController GET /api/sessions/{id}/messages 新增可选 @RequestParam(required=false) Boolean userInput 透传，completeSubSession 等既有单参调用不变；2) EvaluationExecutionService.getBenchmarkUserMessages 过滤链追加 Boolean.TRUE.equals(m.userInput())（role='user' 且 user_input=true 且非 rollback），评估基准只重放用户真实输入，会话间传递的 user 消息不参与评估；3) MemoryQueryProviderImpl.getMessageSeqsByRole 角色归类改为：role='user' 且 user_input=true 归 userSeqs、role='user' 且 user_input=false（会话间传递）归 assistantSeqs（不当作用户角色参与记忆查询）、tool/assistant 角色归类不变；4) 测试同步：SessionServiceImplTest 新增 userInput null/true 过滤 2 用例（共 36）、SessionControllerTest 新增 getMessages 端点透传 3 用例（共 27）、EvaluationExecutionServiceTest createUserMessage 辅助方法默认 userInput=true 并新增 user_input=false/null 过滤与混合过滤 3 用例（共 32）、MemoryQueryProviderImplTest message() 辅助方法支持 userInput 参数并新增 user_input=false 归 assistantSeqs 1 用例（共 12）。\n\n测试总结：全部测试通过。编译测试通过（mvn -B clean test -pl platform-app -am，5 模块 BUILD SUCCESS，release 17，agent-base 120+58、agent-integration 46+17、platform-data 55+18、platform-app 153+88 源文件全量编译）；单元测试 107/107 通过（SessionServiceImplTest 36 + SessionControllerTest 27 + EvaluationExecutionServiceTest 32 + MemoryQueryProviderImplTest 12），Failures 0、Errors 0、Skipped 0。接口测试：SessionControllerTest 以 Mockito 直调覆盖 GET /api/sessions/{id}/messages 端点（userInput null/true 透传、空结果），活体 HTTP 因无运行服务未执行（Controller/Service 单测已完整覆盖）；向后兼容验证：不传 userInput 时走全量路径行为不变。E2E 不适用（无 UI 变更）。无环境问题，无需修复项；建议后续联调环境对 GET /api/sessions/{id}/messages?userInput=true 做一次真实 HTTP 冒烟验证。",
+    "errors": []
   }
 ]

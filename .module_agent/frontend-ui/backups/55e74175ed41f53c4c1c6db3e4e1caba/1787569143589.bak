@@ -16,21 +16,6 @@ const ROLE_LABELS: Record<string, { text: string; color: string }> = {
   system: { text: '系统', color: 'default' },
 };
 
-/** 会话间传递的 user 消息（userInput=false）使用的标签。 */
-const PASS_THROUGH_LABEL: { text: string; color: string } = { text: '传递', color: 'orange' };
-
-/**
- * 解析消息角色标签：role='user' 且 userInput===false 的消息以「传递」标签替代「用户」标签。
- * @param msg 消息
- * @returns 标签文案与颜色
- */
-function resolveRoleLabel(msg: SessionMessage): { text: string; color: string } {
-  if (msg.role === 'user' && msg.userInput === false) {
-    return PASS_THROUGH_LABEL;
-  }
-  return ROLE_LABELS[msg.role] || { text: msg.role, color: 'default' };
-}
-
 const LINE_ROW_STYLE: CSSProperties = {
   whiteSpace: 'nowrap',
   overflow: 'hidden',
@@ -103,7 +88,7 @@ function renderToolCallFlow(messages: SessionMessage[], msgIndex: number, toolCa
 
 function renderMessageFlow(messages: SessionMessage[], sessionId?: string): JSX.Element[] {
   return messages.map((msg, index) => {
-    const roleCfg = resolveRoleLabel(msg);
+    const roleCfg = ROLE_LABELS[msg.role] || { text: msg.role, color: 'default' };
     return (
       <div
         key={msg.id}
@@ -197,8 +182,8 @@ function ConversationDetail(): JSX.Element {
       dataIndex: 'role',
       key: 'role',
       width: 100,
-      render: (_role: string, record: SessionMessage) => {
-        const config = resolveRoleLabel(record);
+      render: (role: string) => {
+        const config = ROLE_LABELS[role] || { text: role, color: 'default' };
         return <Tag color={config.color}>{config.text}</Tag>;
       },
     },

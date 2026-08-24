@@ -49,8 +49,25 @@ export async function listChildSessions(parentId: string): Promise<Session[]> {
   return res.data.data;
 }
 
-export async function getSessionMessages(sessionId: string): Promise<SessionMessage[]> {
-  const res = await api.get<ApiResponse<SessionMessage[]>>(`/sessions/${sessionId}/messages`);
+/** getSessionMessages 可选过滤参数。 */
+export interface SessionMessagesParams {
+  /** 传 true 时仅返回用户真实输入（user_input=true）的消息。 */
+  userInput?: boolean;
+}
+
+/**
+ * 获取会话消息列表。
+ * @param sessionId 会话 ID
+ * @param params 可选过滤参数（透传到 GET /sessions/{id}/messages 查询参数）
+ * @returns 消息列表
+ */
+export async function getSessionMessages(
+  sessionId: string,
+  params?: SessionMessagesParams,
+): Promise<SessionMessage[]> {
+  const res = await api.get<ApiResponse<SessionMessage[]>>(`/sessions/${sessionId}/messages`, {
+    params,
+  });
   return res.data.data;
 }
 

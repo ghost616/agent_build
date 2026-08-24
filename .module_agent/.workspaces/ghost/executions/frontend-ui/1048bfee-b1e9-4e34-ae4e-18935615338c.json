@@ -1,0 +1,18 @@
+[
+  {
+    "plan_id": "plan_26433562-1eb7-4201-bb8e-6127bc71bf38",
+    "plan": "用户消息列表只返回用户输入、对话详情「传递」标签替代「用户」标签",
+    "modified_files": [
+      "src/types/session.ts",
+      "src/services/session.ts",
+      "src/pages/sessions/ConversationHistory.tsx",
+      "src/pages/sessions/ConversationDetail.tsx",
+      "src/services/__tests__/session.test.ts",
+      "src/pages/sessions/__tests__/ConversationHistory.test.tsx",
+      "src/pages/sessions/__tests__/ConversationDetail.test.tsx",
+      "e2e/userInput.spec.ts"
+    ],
+    "summary": "执行总结：本轮共修改 8 个文件 —— 1) src/types/session.ts：SessionMessage 接口新增 userInput?: boolean 可选字段（对应后端 SessionMessageDTO.userInput）；2) src/services/session.ts：新增 SessionMessagesParams 接口，getSessionMessages(sessionId, params?) 将 { userInput } 透传到 GET /sessions/{id}/messages 查询参数（后端 @RequestParam(required=false) Boolean userInput，契约一致）；3) src/pages/sessions/ConversationHistory.tsx：fetchUserMessages 改用 getSessionMessages(sid, { userInput: true }) 只展示用户真实输入，保留 role==='user' 本地兜底过滤；4) src/pages/sessions/ConversationDetail.tsx：新增 PASS_THROUGH_LABEL（传递/orange）与 resolveRoleLabel 辅助函数，表格「角色」列与消息流 Modal（renderMessageFlow）对 role='user' 且 userInput===false 的消息以「传递」标签替代「用户」标签；5) 同步更新 3 个测试文件（session.test.ts 新增 getSessionMessages 6 个单元用例、ConversationHistory.test.tsx 与 ConversationDetail.test.tsx 新增静态断言）；6) 离朱新建 e2e/userInput.spec.ts（4 个 E2E 用例，可直接复用）。\n\n测试总结：因环境原因无法完整执行，skip_count=15（E2E 4 用例 + 接口测试），passed_count=86，failed_count=0。单元测试 86/86 通过（session.test.ts 41 / ConversationHistory.test.tsx 12 / ConversationDetail.test.tsx 27 / session 类型静态 6）；编译测试变更文件 tsc 零错误（其余为项目既有错误：EvaluationResultList/ToolList 2 个 + 测试文件缺 node types），vite build 通过（3356 模块，exit 0）；E2E 因环境问题跳过——playwright 拉起 vite dev server 后预构建死锁（node_modules 中 rolldown 包被 @vitejs/plugin-react 检测后切换 oxc 预构建路径，与 vite 5.4.21 esbuild optimizeDeps 冲突，首页 load 事件 120s 超时，项目既有 e2e/ConversationHistory.spec.ts 11 用例同样超时；走 rollup 的 vite build 成功佐证代码本身无问题）；接口测试因后端 8080 未运行跳过，已通过静态核验前后端 userInput 参数契约一致。环境修复建议：移除/降级 rolldown 或升级 vite 6/7 后运行 npx playwright test e2e/userInput.spec.ts。",
+    "errors": []
+  }
+]

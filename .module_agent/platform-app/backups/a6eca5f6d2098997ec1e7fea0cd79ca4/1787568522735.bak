@@ -116,12 +116,7 @@ public class MemoryQueryProviderImpl implements MemoryQueryProvider {
             }
             String role = message.getRole();
             if ("user".equals(role)) {
-                if (Boolean.TRUE.equals(message.getUserInput())) {
-                    userSeqs.add(message.getSequenceNum());
-                } else {
-                    // user_input=false（会话间传递的 user 消息）不当作用户角色参与记忆查询，归入 assistant 序列
-                    assistantSeqs.add(message.getSequenceNum());
-                }
+                userSeqs.add(message.getSequenceNum());
             } else if ("tool".equals(role)) {
                 toolSeqs.add(message.getSequenceNum());
             } else if ("assistant".equals(role)) {

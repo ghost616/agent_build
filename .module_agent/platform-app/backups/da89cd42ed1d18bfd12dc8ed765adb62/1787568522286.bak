@@ -135,22 +135,11 @@ public class SessionServiceImpl implements SessionService {
 
     @Override
     public List<SessionMessageDTO> getMessages(Long sessionId) {
-        return getMessages(sessionId, null);
-    }
-
-    @Override
-    public List<SessionMessageDTO> getMessages(Long sessionId, Boolean userInput) {
         Session entity = sessionMapper.selectById(sessionId);
         if (entity == null) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
-        List<Message> messages = messageService.getAllMessages(sessionId);
-        if (Boolean.TRUE.equals(userInput)) {
-            messages = messages.stream()
-                    .filter(m -> "user".equals(m.getRole()) && Boolean.TRUE.equals(m.getUserInput()))
-                    .toList();
-        }
-        return defaultMessageDataProvider.toSessionMessageDTOs(messages);
+        return defaultMessageDataProvider.toSessionMessageDTOs(messageService.getAllMessages(sessionId));
     }
 
     @Override

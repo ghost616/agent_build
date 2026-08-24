@@ -1,0 +1,11 @@
+{
+  "plan_id": "plan_088f9d7a-2477-4927-857d-6d990d1cbf69",
+  "module_name": "agent-base",
+  "development_plan": "userInput 保存语义修正——assistant/tool 消息不再落库默认 true。任务：1) MessageSavePostHook（assistant 消息保存）在 sessionManager.messageSave() 链式调用中显式设置 .userInput(false)；2) ToolExecutionService（tool 消息保存）在 messageSave() 中显式设置 .userInput(false)；3) 同步更新受影响单元测试。user 角色保存点已有语义（ChatService 用户输入 true、AgentContextManager 会话间 false）保持不变。",
+  "session_id": "c86d3576-f2c3-42b5-b24b-0dfb142ab1b8",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/MessageSavePostHook.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ToolExecutionService.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ToolExecutionServiceTest.java"
+  ]
+}

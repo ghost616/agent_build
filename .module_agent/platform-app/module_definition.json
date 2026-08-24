@@ -11,15 +11,15 @@
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/controller/SessionController.java",
-      "description": "会话管理 REST 控制器，提供会话的 CRUD、消息查询、消息序号范围查询（转换为 MessageDTO）、回滚、子会话列表查询、子会话数据获取（映射 thinking 字段）、子会话完成等 HTTP API 端点；注入 SessionMemoryService 提供 GET /api/sessions/{id}/memory/trigger、GET/PUT /api/sessions/{id}/memory-prompt、POST /api/sessions/{id}/memory/regenerate、GET /api/sessions/{id}/memory/regenerate/status、POST /api/sessions/{id}/memory/update 端点；注入 SessionMemoryESClient 提供 GET /api/sessions/{id}/memory 端点（type/page/size 参数，分页返回记忆文档，查询按当前登录用户 userId 过滤）"
+      "description": "会话管理 REST 控制器，提供会话的 CRUD、消息查询（GET /api/sessions/{id}/messages，可选 userInput 查询参数透传给 sessionService.getMessages(id, userInput)）、消息序号范围查询（转换为 MessageDTO）、回滚、子会话列表查询、子会话数据获取（映射 thinking 字段）、子会话完成等 HTTP API 端点；注入 SessionMemoryService 提供 GET /api/sessions/{id}/memory/trigger、GET/PUT /api/sessions/{id}/memory-prompt、POST /api/sessions/{id}/memory/regenerate、GET /api/sessions/{id}/memory/regenerate/status、POST /api/sessions/{id}/memory/update 端点；注入 SessionMemoryESClient 提供 GET /api/sessions/{id}/memory 端点（type/page/size 参数，分页返回记忆文档，查询按当前登录用户 userId 过滤）"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/session/SessionService.java",
-      "description": "会话管理服务接口，定义会话 CRUD、消息查询、回滚、查询子会话列表等业务方法"
+      "description": "会话管理服务接口，定义会话 CRUD、消息查询（含可选 userInput 过滤重载 getMessages(Long, Boolean)——null 返回全部、true 仅返回 role='user' 且 user_input=true 的消息）、按对话查询消息、回滚、查询子会话列表等业务方法"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/session/SessionServiceImpl.java",
-      "description": "会话管理服务实现，包含会话创建（含工具绑定）、查询、删除、回滚、子会话列表查询等业务逻辑；rollback 不再声明 @Transactional（跨库：sessionManager.rollbackToLastUserMessage 内部调用 @DS(message) 的 messageMapper，在主库事务内 @DS 路由失效），改为拆分事务让 message 操作在 message 数据源上自动提交执行；getMessages 注入并调用 MessageService.getAllMessages 查询消息（sessionId + rollback=false，按 sequenceNum 升序，不过滤 memoryPoint）后通过 DefaultMessageDataProvider.toMessageDTOs 转换为 MessageDTO 返回"
+      "description": "会话管理服务实现，包含会话创建（含工具绑定）、查询、删除、回滚、子会话列表查询等业务逻辑；rollback 不再声明 @Transactional（跨库：sessionManager.rollbackToLastUserMessage 内部调用 @DS(message) 的 messageMapper，在主库事务内 @DS 路由失效），改为拆分事务让 message 操作在 message 数据源上自动提交执行；getMessages(Long) 注入并调用 MessageService.getAllMessages 查询消息（sessionId + rollback=false，按 sequenceNum 升序，不过滤 memoryPoint）后通过 DefaultMessageDataProvider.toMessageDTOs 转换为 MessageDTO 返回；getMessages(Long, Boolean) 重载在查询全量后按 userInput 过滤（true 时仅保留 role='user' 且 user_input=true 的消息）再经 toSessionMessageDTOs 返回，单参版本委托双参 null 版本（向后兼容：不传参行为不变）"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/config/AgentContextConfiguration.java",
@@ -99,7 +99,7 @@
     },
     {
       "path": "platform-app/src/test/java/com/ghost616/platform/controller/SessionControllerTest.java",
-      "description": "会话控制器单元测试，覆盖 getSubSessionData/triggerSessionMemory/completeSubSession/queryMemory/getMessagesBySeqRange 及新增 memory-prompt 读写、memory/regenerate 触发与状态查询、memory/update 端点委派场景"
+      "description": "会话管理 REST 控制器单元测试，覆盖 getMessages 端点（userInput null/true 透传与空列表）、getMessagesBySeqRange、completeSubSession 各分支、queryMemory、memory 相关端点、getSubSessionData 映射等场景"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultToolExecutionProvider.java",
@@ -203,7 +203,7 @@
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/evaluation/EvaluationExecutionService.java",
-      "description": "评估后台执行服务（EvaluationExecutionService，@Service）：接收 evaluationId 执行异步评估，验证基准会话有用户消息（过滤 rollback 消息），复制基准会话数据创建执行会话（透传 thinking），通过 AsyncEvaluationExecutor 逐条执行用户消息。execute 异步提交后轮询等待：每次 sleep 200ms，先检查 FAILED 状态直接返回，否则通过 defaultChatDataCacheProvider.getCacheIdsBySessionId 获取第一个 cacheId（列表为空则继续轮询），再通过 getMaxChunkIndex(cacheId) > 0 判断数据已写入后退出轮询返回初始 statusDTO。提供 getStatus/createExecutionSession/generateResult/generateResultAsync/getGenerateStatus 方法，内存 ConcurrentHashMap 管理执行与生成状态，TTL(1h)+@Scheduled 清理过期状态。线程变量传播：提交 executeAsync/generateResultAsync 前通过注入的 ThreadVariableHandler wrap() 捕获当前登录用户，作为 ThreadVariableWrapper 参数传入异步执行器"
+      "description": "评估后台执行服务（EvaluationExecutionService，@Service）：接收 evaluationId 执行异步评估，验证基准会话有用户消息（过滤条件：role='user' 且 user_input=true 且非 rollback——评估基准只重放用户真实输入，会话间传递的 user 消息不参与），复制基准会话数据创建执行会话（透传 thinking），通过 AsyncEvaluationExecutor 逐条执行用户消息。execute 异步提交后轮询等待：每次 sleep 200ms，先检查 FAILED 状态直接返回，否则通过 defaultChatDataCacheProvider.getCacheIdsBySessionId 获取第一个 cacheId（列表为空则继续轮询），再通过 getMaxChunkIndex(cacheId) > 0 判断数据已写入后退出轮询返回初始 statusDTO。提供 getStatus/createExecutionSession/generateResult/generateResultAsync/getGenerateStatus 方法，内存 ConcurrentHashMap 管理执行与生成状态，TTL(1h)+@Scheduled 清理过期状态。线程变量传播：提交 executeAsync/generateResultAsync 前通过注入的 ThreadVariableHandler wrap() 捕获当前登录用户，作为 ThreadVariableWrapper 参数传入异步执行器"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/evaluation/EvaluationResultGenerateService.java",
@@ -383,7 +383,7 @@
     },
     {
       "path": "platform-app/src/test/java/com/ghost616/platform/service/evaluation/EvaluationExecutionServiceTest.java",
-      "description": "EvaluationExecutionService 单元测试：Mockito 注入 evaluationMapper/sessionMapper/sessionToolMapper/sessionSkillMapper/messageDataProvider/evaluationResultGenerateService/asyncEvaluationExecutor/defaultChatDataCacheProvider，覆盖 execute（评估不存在/基准会话ID为空/无用户消息/正常执行返回状态DTO/轮询缓存可用/轮询缓存列表空继续轮询/轮询数据未写入继续轮询/轮询FAILED返回/thinking透传/rollback过滤）、getStatus、createExecutionSession、generateResult、generateResultAsync、getGenerateStatus、cleanupStaleStatuses"
+      "description": "评估后台执行服务单元测试，覆盖 execute（评估不存在/基准会话缺失/无用户消息/正常执行/轮询各分支）、getStatus、createExecutionSession、generateResult/generateResultAsync/getGenerateStatus、cleanupStaleStatuses，以及 getBenchmarkUserMessages 过滤（rollback 过滤、user_input=false/null 过滤、混合 user_input 仅保留 true）场景"
     },
     {
       "path": "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultChatDataCacheProviderTest.java",
@@ -463,11 +463,11 @@
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/memory/MemoryQueryProviderImpl.java",
-      "description": "AI 记忆查询 Provider 实现（实现 agent-integration 的 MemoryQueryProvider 接口，@Component）：getMemories 通过 SessionMemoryESClient 查询 session_memory 索引（VECTOR/FULLTEXT/HYBRID，VECTOR/HYBRID 时用 AgentConfig.vectorModelId 对应向量模型对 query 向量化，支持 sessionId/aggregationType/时间范围过滤）；getMessageSeqsByRole(String, List<SeqRange>) 通过 MessageMapper 一次 SQL 查询（eq sessionId、eq rollback=false、对每个区间 OR 合并 ge/le sequenceNum、orderByAsc）并按 role（user/tool/assistant）分类去重返回序号列表。数据用户隔离：getMemories 将当前登录用户 userId（UserContext，无上下文为 null）传入 ES 搜索按 userId 过滤记忆文档；getMessageSeqsByRole 在当前用户上下文存在时按 Message.user_id eq 过滤"
+      "description": "AI 记忆查询 Provider 实现（实现 agent-integration 的 MemoryQueryProvider 接口，@Component）：getMemories 通过 SessionMemoryESClient 查询 session_memory 索引（VECTOR/FULLTEXT/HYBRID，VECTOR/HYBRID 时用 AgentConfig.vectorModelId 对应向量模型对 query 向量化，支持 sessionId/aggregationType/时间范围过滤）；getMessageSeqsByRole(String, List<SeqRange>) 通过 MessageMapper 一次 SQL 查询（eq sessionId、eq rollback=false、对每个区间 OR 合并 ge/le sequenceNum、orderByAsc）并按角色分类去重返回序号列表——role='user' 且 user_input=true 归 userSeqs、role='user' 且 user_input=false（会话间传递）归 assistantSeqs（不当作用户角色参与记忆查询）、tool 归 toolSeqs、assistant 归 assistantSeqs。数据用户隔离：getMemories 将当前登录用户 userId（UserContext，无上下文为 null）传入 ES 搜索按 userId 过滤记忆文档；getMessageSeqsByRole 在当前用户上下文存在时按 Message.user_id eq 过滤"
     },
     {
       "path": "platform-app/src/test/java/com/ghost616/platform/service/memory/MemoryQueryProviderImplTest.java",
-      "description": "MemoryQueryProviderImpl 单元测试，覆盖 getMemories（参数校验、VECTOR/FULLTEXT/HYBRID 搜索分派、向量化链路逐级缺失返回空向量回退、null 序号映射为 0、空结果返回空列表）与 getMessageSeqsByRole（批量区间一次 SQL 查询、按 role 分类并去重、跳过 sequenceNum 为 null 的消息、空结果返回空三列表）"
+      "description": "AI 记忆查询 Provider 单元测试，覆盖 getMemories（VECTOR/FULLTEXT/HYBRID 搜索、embedQuery、sessionId 为空、异常路径）与 getMessageSeqsByRole（无效参数、按角色分类去重、user_input=false 归 assistantSeqs、null 序号跳过、无消息）场景"
     },
     {
       "path": "platform-app/src/main/java/com/ghost616/platform/service/history/HistoryMessageQueryProviderImpl.java",

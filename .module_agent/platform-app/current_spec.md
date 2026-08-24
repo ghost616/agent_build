@@ -282,3 +282,6 @@ platform-app 模块包含以下功能：
 - 回滚目标限定用户真实输入：rollbackToLastUserMessage 查询条件为 role='user' AND user_input=1（只回滚到用户真实输入，会话间传递的 user 消息不作为回滚锚点）
 - 记忆分组仅以用户真实输入为起点：SessionMemoryService.groupByUser 仅以 role='user' 且 user_input=true 的消息为组起点，user_input=false 的 user 消息（会话间传递）不产生新组、归入当前相邻组，聚合内容仍包含组内完整消息链（含 user_input=false 消息）；无 user_input=true 消息时不产生分组、跳过聚合
 - 记忆点统计（MessageMapper.countUserMessages/findNthUserSequenceNum）已在 platform-data 层按 user_input=1 过滤；历史折叠由 agent-base 层处理，platform-app 不涉及
+- 消息查询接口 userInput 过滤：SessionService/SessionServiceImpl.getMessages 新增 getMessages(Long sessionId, Boolean userInput) 重载——userInput 为 null/不传返回全部消息（向后兼容），传 true 时先经 messageService.getAllMessages 查询全量后按 role='user' 且 user_input=true 过滤，再经 toSessionMessageDTOs 返回；SessionController GET /api/sessions/{id}/messages 新增可选 @RequestParam(required=false) Boolean userInput 透传；单参 getMessages(Long) 委托双参 null 版本，completeSubSession 等既有调用不变
+- 评估基准只重放用户真实输入：EvaluationExecutionService.getBenchmarkUserMessages 过滤链追加 Boolean.TRUE.equals(m.userInput())（role='user' 且 user_input=true 且非 rollback），会话间传递的 user 消息不参与评估重放
+- 记忆查询角色归类（MemoryQueryProviderImpl.getMessageSeqsByRole）：role='user' 且 user_input=true 的消息归 userSeqs；role='user' 且 user_input=false（会话间传递）归 assistantSeqs（不当作用户角色参与记忆查询）；tool/assistant 角色归类不变

@@ -22,11 +22,6 @@ describe('ConversationHistory 会话历史 (静态验证)', () => {
     expect(source).toContain("msg.role === 'user'");
   });
 
-  it('fetchUserMessages 应以 userInput: true 调用 getSessionMessages 只展示用户真实输入', () => {
-    const source = readFileSync(pagePath, 'utf-8');
-    expect(source).toContain('getSessionMessages(sid, { userInput: true })');
-  });
-
   it('「查看详情」跳转应传递 state.sessionId', () => {
     const source = readFileSync(pagePath, 'utf-8');
     expect(source).toContain('`/conversations/${record.conversationId}/detail`');

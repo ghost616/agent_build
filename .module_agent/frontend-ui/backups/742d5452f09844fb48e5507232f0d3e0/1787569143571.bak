@@ -30,7 +30,7 @@ function ConversationHistory(): JSX.Element {
   const fetchUserMessages = useCallback(async (sid: string): Promise<void> => {
     setMessagesLoading(true);
     try {
-      const history = await getSessionMessages(sid, { userInput: true });
+      const history = await getSessionMessages(sid);
       const users = history.filter((msg) => msg.role === 'user');
       setUserMessages(users);
     } catch {

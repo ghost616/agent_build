@@ -316,6 +316,7 @@ public class ToolExecutionService {
                 String toolResultJson = JsonMapper.MAPPER.writeValueAsString(toolResultMap);
                 sessionManager.messageSave().sessionId(sessionId).role("tool")
                         .content(r.result()).toolInfo(new ToolInfo(r.toolId(), r.toolName())).toolResult(toolResultJson)
+                        .userInput(false)
                         .conversationId(conversationId).save();
             } catch (Exception e) {
                 log.error("sessionId={} 构建 toolResult JSON 失败", sessionId, e);

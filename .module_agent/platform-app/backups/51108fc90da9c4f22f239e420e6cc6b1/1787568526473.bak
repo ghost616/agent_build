@@ -85,17 +85,13 @@ class EvaluationExecutionServiceTest {
     }
 
     private MessageDataProvider.MessageDTO createUserMessage(String content) {
-        return createUserMessage(content, null, Boolean.TRUE);
+        return createUserMessage(content, null);
     }
 
     private MessageDataProvider.MessageDTO createUserMessage(String content, Boolean rollback) {
-        return createUserMessage(content, rollback, Boolean.TRUE);
-    }
-
-    private MessageDataProvider.MessageDTO createUserMessage(String content, Boolean rollback, Boolean userInput) {
         return new MessageDataProvider.MessageDTO(
                 "1", String.valueOf(BENCHMARK_SESSION_ID), "user", content,
-                null, null, null, null, null, null, rollback, null, null, null, null, userInput
+                null, null, null, null, null, null, rollback, null, null, null, null, null
         );
     }
 
@@ -346,49 +342,6 @@ class EvaluationExecutionServiceTest {
 
             EvaluationExecutionStatusDTO result = service.execute(EVALUATION_ID);
             assertEquals(2, result.getTotalSteps());
-        }
-
-        @Test
-        void userInputFalseMessage_shouldBeFilteredOut() {
-            Evaluation evaluation = createEvaluation(BENCHMARK_SESSION_ID);
-            when(evaluationMapper.selectById(EVALUATION_ID)).thenReturn(evaluation);
-            when(messageDataProvider.getMessages(String.valueOf(BENCHMARK_SESSION_ID)))
-                    .thenReturn(List.of(createUserMessage("passed msg", null, Boolean.FALSE)));
-
-            BusinessException ex = assertThrows(BusinessException.class, () -> service.execute(EVALUATION_ID));
-            assertEquals(ErrorCode.EVALUATION_BENCHMARK_NO_USER_MESSAGE, ex.getErrorCode());
-        }
-
-        @Test
-        void userInputNullMessage_shouldBeFilteredOut() {
-            Evaluation evaluation = createEvaluation(BENCHMARK_SESSION_ID);
-            when(evaluationMapper.selectById(EVALUATION_ID)).thenReturn(evaluation);
-            when(messageDataProvider.getMessages(String.valueOf(BENCHMARK_SESSION_ID)))
-                    .thenReturn(List.of(createUserMessage("null input", null, null)));
-
-            BusinessException ex = assertThrows(BusinessException.class, () -> service.execute(EVALUATION_ID));
-            assertEquals(ErrorCode.EVALUATION_BENCHMARK_NO_USER_MESSAGE, ex.getErrorCode());
-        }
-
-        @Test
-        void mixedUserInputMessages_shouldOnlyKeepUserInputTrue() {
-            Evaluation evaluation = createEvaluation(BENCHMARK_SESSION_ID);
-            when(evaluationMapper.selectById(EVALUATION_ID)).thenReturn(evaluation);
-            when(messageDataProvider.getMessages(String.valueOf(BENCHMARK_SESSION_ID)))
-                    .thenReturn(List.of(
-                            createUserMessage("real input", false, Boolean.TRUE),
-                            createUserMessage("passed msg", false, Boolean.FALSE),
-                            createUserMessage("null input", false, null)
-                    ));
-            when(sessionMapper.selectById(BENCHMARK_SESSION_ID)).thenReturn(createBenchmarkSession());
-            doAnswer(inv -> {
-                Session s = inv.getArgument(0);
-                s.setId(EXECUTION_SESSION_ID);
-                return null;
-            }).when(sessionMapper).insert(any(Session.class));
-
-            EvaluationExecutionStatusDTO result = service.execute(EVALUATION_ID);
-            assertEquals(1, result.getTotalSteps());
         }
     }
 

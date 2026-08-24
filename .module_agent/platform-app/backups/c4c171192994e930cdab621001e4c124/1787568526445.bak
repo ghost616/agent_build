@@ -291,46 +291,6 @@ class SessionControllerTest {
     }
 
     @Test
-    void getMessages_shouldPassUserInputNullAndReturnMessages() {
-        SessionMessageDTO dto =
-                buildMessageDTO("user", "hello", null, null, null, null, null);
-        when(sessionService.getMessages(100L, null)).thenReturn(List.of(dto));
-
-        ApiResponse<List<SessionMessageDTO>> response = controller.getMessages(100L, null);
-
-        assertTrue(response.isSuccess());
-        assertEquals(1, response.getData().size());
-        assertEquals("hello", response.getData().get(0).getContent());
-        verify(sessionService).getMessages(100L, null);
-    }
-
-    @Test
-    void getMessages_shouldPassUserInputTrueAndReturnMessages() {
-        SessionMessageDTO dto =
-                buildMessageDTO("user", "real input", null, null, null, null, null);
-        when(sessionService.getMessages(100L, Boolean.TRUE)).thenReturn(List.of(dto));
-
-        ApiResponse<List<SessionMessageDTO>> response = controller.getMessages(100L, Boolean.TRUE);
-
-        assertTrue(response.isSuccess());
-        assertEquals(1, response.getData().size());
-        assertEquals("real input", response.getData().get(0).getContent());
-        verify(sessionService).getMessages(100L, Boolean.TRUE);
-    }
-
-    @Test
-    void getMessages_shouldReturnEmptyListWhenNoMessages() {
-        when(sessionService.getMessages(999L, null)).thenReturn(List.of());
-
-        ApiResponse<List<SessionMessageDTO>> response = controller.getMessages(999L, null);
-
-        assertTrue(response.isSuccess());
-        assertNotNull(response.getData());
-        assertTrue(response.getData().isEmpty());
-        verify(sessionService).getMessages(999L, null);
-    }
-
-    @Test
     void getMessagesBySeqRange_shouldConvertToDTOAndReturnMessages() {
         com.ghost616.platform.entity.Message msg = new com.ghost616.platform.entity.Message();
         msg.setId(1L);

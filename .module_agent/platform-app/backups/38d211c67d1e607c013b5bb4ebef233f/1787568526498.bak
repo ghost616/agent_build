@@ -102,16 +102,11 @@ class MemoryQueryProviderImplTest {
     }
 
     private Message message(Long sessionId, String role, Integer seq) {
-        return message(sessionId, role, seq, "user".equals(role));
-    }
-
-    private Message message(Long sessionId, String role, Integer seq, boolean userInput) {
         Message m = new Message();
         m.setSessionId(sessionId);
         m.setRole(role);
         m.setSequenceNum(seq);
         m.setRollback(false);
-        m.setUserInput(userInput);
         return m;
     }
 
@@ -296,24 +291,6 @@ class MemoryQueryProviderImplTest {
             String sql = wrapper.getSqlSegment();
             return sql.contains("rollback") && sql.contains("sequence_num");
         }));
-    }
-
-    @Test
-    @DisplayName("getMessageSeqsByRole: user_input=false 的 user 消息归 assistantSeqs（不当作用户角色参与记忆查询）")
-    void getMessageSeqsByRole_userInputFalse_goesToAssistantSeqs() {
-        when(messageMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(
-                message(100L, "user", 1, true),
-                message(100L, "user", 2, false),
-                message(100L, "user", 3, true),
-                message(100L, "assistant", 4, false),
-                message(100L, "tool", 5, false)));
-
-        MessageSeqByRole result = provider.getMessageSeqsByRole("100",
-                List.of(new SeqRange(1, 5)));
-
-        assertEquals(List.of(1, 3), result.userSeqList());
-        assertEquals(List.of(5), result.toolSeqList());
-        assertEquals(List.of(2, 4), result.assistantSeqList());
     }
 
     @Test
