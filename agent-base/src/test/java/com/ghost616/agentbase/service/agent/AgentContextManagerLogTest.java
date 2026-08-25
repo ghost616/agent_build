@@ -587,6 +587,38 @@ class AgentContextManagerLogTest {
     }
 
     @Test
+    void 软删子会话remove剪枝并记录CACHE_REMOVE日志() {
+        String parentId = "100";
+        String childId = "101";
+        when(dataProvider.loadAgentContext(parentId)).thenReturn(
+                new ContextDataProvider.AgentContextData(agentId, "parent", "200", 10, List.of(), Map.of(), null,
+                        List.of(new AgentExecutionContext.ChildSession(childId, "c1", "d1", "300")), null, null));
+        when(sessionManager.getMessages(parentId)).thenReturn(List.of());
+        when(toolManager.getSessionTools(eq(parentId), anyBoolean())).thenReturn(List.of());
+        agentContextManager.build(parentId).build().context();
+
+        // 第一次调用返回活跃数据（子会话入缓存），第二次返回 null（模拟软删后 loadAgentContext 查不到）
+        when(dataProvider.loadAgentContext(childId)).thenReturn(
+                new ContextDataProvider.AgentContextData(agentId, "child", "200", 10, List.of(), Map.of(), parentId, null, null, null),
+                null);
+        agentContextManager.get(childId);
+
+        agentContextManager.remove(childId);
+
+        ArgumentCaptor<LogData> captor = ArgumentCaptor.forClass(LogData.class);
+        verify(agentLog, atLeastOnce()).addLog(captor.capture());
+        CacheRemoveLogData log = captor.getAllValues().stream()
+                .filter(l -> l.logType() == LogType.CACHE_REMOVE)
+                .map(l -> (CacheRemoveLogData) l)
+                .findFirst().orElse(null);
+
+        assertNotNull(log);
+        assertEquals(childId, log.getSessionId());
+        // 剪枝生效：父会话缓存 childSessions 中已无该子会话
+        assertEquals(0, agentContextManager.get(parentId).context().getChildSessions().size());
+    }
+
+    @Test
     void agentLog抛异常时不中断主流程() {
         stubBasicContext();
         doThrow(new RuntimeException("log failure")).when(agentLog).addLog(any());

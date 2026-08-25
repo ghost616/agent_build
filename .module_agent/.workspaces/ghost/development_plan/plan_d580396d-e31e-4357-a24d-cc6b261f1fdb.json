@@ -1,0 +1,11 @@
+{
+  "plan_id": "plan_d580396d-e31e-4357-a24d-cc6b261f1fdb",
+  "module_name": "agent-base",
+  "development_plan": "修复以下审查问题（皋陶复审 agent-base 未通过，阻断性 error 为跨计划协同）：\n- [agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java] 剪枝生效后破坏 SubSessionCallbackTool.findExistingChildSessionId 的遍历：工具对 ctx.getChildSessions()（unmodifiableList 视图，底层为父会话共享同一 ArrayList）做 for-each，循环体内对失效子会话调 remove → 本剪枝对同一底层列表原地 removeIf。后果：① [失效X, 有效Y] 同名字会话时 X 被移除后列表缩小，迭代器提前结束 Y 被跳过 → 返回 null → 重复创建子会话；② 剪枝后若仍有剩余元素，下一次 next() 触发 ArrayList fail-fast → ConcurrentModificationException → 工具返回错误 JSON。皋陶要求与工具侧防御性拷贝同步落地。\n  注：工具侧防御性拷贝已由 agent-integration 修复计划（plan_52c7bc67）落地——SubSessionCallbackTool.findExistingChildSessionId 已改为遍历 new ArrayList<>(ctx.getChildSessions())（已验证存在，agent-integration 修复已过审）。本计划任务是：1) 核对并验证剪枝（pruneChildSessionIfDeleted 对 agentContextData().childSessions() 原地 removeIf / 预构建回退 mutator().refreshChildSessions）与工具侧防御性拷贝组合下行为正确：[失效X, 有效Y] 同名字会话场景复用第二个有效会话不重复创建、多元素场景不抛 CME；2) 建议补充跨层集成级验证（真实剪枝 + 拷贝遍历组合的用例，如 AgentContextManager 剪枝在 SubSessionCallbackTool 拷贝遍历期间触发的场景），证明协同成立；3) 如验证发现剪枝与拷贝存在实际冲突（例如拷贝发生在剪枝前导致快照仍含失效项），修复并补充测试；4) 若有需要，评估 info 级残余缺口（从未被后端缓存过的子会话无法剪枝、未缓存主会话 remove 仍执行完整 loadAgentContext）是否顺手优化，不做强制要求；5) 同步更新受影响单元测试。",
+  "session_id": "42790482-6dc5-4400-a8f9-5344d433602e",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/AgentContextManagerTest.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/tool/SubSessionCallbackToolTest.java"
+  ]
+}

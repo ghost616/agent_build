@@ -1,0 +1,11 @@
+{
+  "plan_id": "plan_29c47e46-d82b-42fe-bf42-0f813d7c2760",
+  "module_name": "agent-base",
+  "development_plan": "修复以下审查问题（皋陶审查 agent-base 未通过）：\n- [agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java] 软删子会话的父缓存清理不生效（计划核心目的落空）：Session 实体 deleted 字段带 @TableLogic，selectById 自动附加 deleted=0。两个真实调用路径中 remove() 执行时子会话行均已软删（SessionServiceImpl.delete 先 deleteById 后 remove；SubSessionCallbackTool 对 exists()==false 即软删会话调用 remove），dataProvider.loadAgentContext(sessionId) 均返回 null，父会话缓存的 childSessions 永远不会被过滤，陈旧子会话条目长期滞留（同名查找每次多做无效 DB 查询，长运行父会话缓存列表持续累积）。建议：loadAgentContext 返回 null 时回退读取子会话自身缓存条目（cache.get(sessionId)?.agentContextData()?.parentSessionId()），或与 platform-app 协调在 SessionServiceImpl.delete 中改为先 remove 后 deleteById\n- [agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java] remove() 语义从\"清除缓存条目\"扩展为\"剪除父会话子会话列表\"，殃及现有调用方：SessionServiceImpl.rollback() 也调用 remove()，此时子会话在 DB 中仍存在，loadAgentContext 能取到 parentSessionId → 活跃子会话会被误从父缓存列表剪除，下次 callback_sub_session 按同名查找将重复创建子会话（回归风险）。建议将\"子会话删除剪枝\"与\"缓存条目驱逐\"职责分离：仅当子会话确认已不存在（如 callback.exists()==false）或走专用删除路径时才剪枝，rollback/普通驱逐不触发\n- [agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java] parentCtx.context()/mutator() 在父条目为轻量缓存（context 未构建）时会触发完整懒构建（加载 messages、tools、MCP 展开等），仅为剪除一个子会话引入额外 DB/工具开销；若该构建抛异常，cache.remove(sessionId) 不会执行且异常会传播给 SessionServiceImpl.delete/rollback 调用方（此前 remove 不抛异常）。建议先读取 parentCtx.agentContextData() 中的 childSessions 或对剪枝段做保护\n- [agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java] 对主会话（非子会话）的每次 remove（如 rollback 主会话）现在都会执行一次完整 loadAgentContext（含 agent 配置、技能、变量、子会话列表多条查询）仅用于确认 parentSessionId 为空，属非必要开销，可先查缓存再查 DB\n- 同步更新受影响单元测试（AgentContextManagerTest、AgentContextManagerLogTest、SubSessionCallbackFunctionalTest 等）",
+  "session_id": "42790482-6dc5-4400-a8f9-5344d433602e",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/AgentContextManagerTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/AgentContextManagerLogTest.java"
+  ]
+}

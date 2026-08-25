@@ -426,6 +426,50 @@ class DefaultSubSessionCallbackTest {
         assertNull(callback.getSubSessionData(parentSessionId));
     }
 
+    // ========== exists 子会话存在性校验 ==========
+
+    @Test
+    void exists_会话存在_返回true() {
+        Long childSessionId = 500L;
+        when(sessionMapper.selectById(childSessionId)).thenReturn(mock(Session.class));
+
+        assertTrue(callback.exists(String.valueOf(childSessionId)));
+        verify(sessionMapper).selectById(childSessionId);
+    }
+
+    @Test
+    void exists_会话不存在_返回false() {
+        Long childSessionId = 501L;
+        when(sessionMapper.selectById(childSessionId)).thenReturn(null);
+
+        assertFalse(callback.exists(String.valueOf(childSessionId)));
+        verify(sessionMapper).selectById(childSessionId);
+    }
+
+    @Test
+    void exists_软删会话_selectById返回null_返回false() {
+        // Session @TableLogic 使已假删（deleted=1）会话 selectById 自动返回 null
+        Long childSessionId = 502L;
+        when(sessionMapper.selectById(childSessionId)).thenReturn(null);
+
+        assertFalse(callback.exists(String.valueOf(childSessionId)));
+        verify(sessionMapper).selectById(childSessionId);
+    }
+
+    @Test
+    void exists_会话ID为null或空白_返回false() {
+        assertFalse(callback.exists(null));
+        assertFalse(callback.exists(""));
+        assertFalse(callback.exists("   "));
+        verify(sessionMapper, never()).selectById(any());
+    }
+
+    @Test
+    void exists_无效ID格式_返回false() {
+        assertFalse(callback.exists("not-a-number"));
+        verify(sessionMapper, never()).selectById(any());
+    }
+
     private DefaultSubSessionCallback.SubSessionData waitForMapEntry(Long key) {
         for (int i = 0; i < 50; i++) {
             DefaultSubSessionCallback.SubSessionData data = callback.getSubSessionData(key);

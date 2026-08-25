@@ -6,6 +6,7 @@ import com.ghost616.agentbase.enums.RequestType;
 import com.ghost616.agentbase.enums.SessionAuthType;
 import com.ghost616.agentbase.enums.ToolType;
 import com.ghost616.agentbase.service.agent.ToolDataProvider;
+import com.ghost616.agentbase.service.agent.AgentContextManager;
 import com.ghost616.agentbase.service.agent.ToolDataProvider.SessionToolInfo;
 import com.ghost616.agentbase.service.agent.ToolDataProvider.SkillToolInfo;
 import com.ghost616.agentbase.service.agent.invoker.CustomToolInvoker;
@@ -88,6 +89,12 @@ public class DefaultToolDataProvider implements ToolDataProvider {
     private final ObjectProvider<HistoryMessageQueryProvider> historyMessageQueryProvider;
     private final DefaultSubSessionCallback defaultSubSessionCallback;
     private final SubSessionWebSocketModeResolver subSessionWebSocketModeResolver;
+    /**
+     * 通过 ObjectProvider 按需获取 AgentContextManager，避免构造器注入环：
+     * DefaultToolDataProvider → AgentContextManager(Bean 依赖 AgentAssembler) → AgentAssembler(依赖 toolDataProvider) → DefaultToolDataProvider。
+     * ObjectProvider 注入本身不触发目标 Bean 实例化，仅在 getCustomInvoker 构造 SubSessionCallbackTool 时按需获取。
+     */
+    private final ObjectProvider<AgentContextManager> agentContextManagerProvider;
 
     @Override
     public List<SessionToolInfo> getSessionToolIds(String sessionId) {
@@ -162,7 +169,8 @@ public class DefaultToolDataProvider implements ToolDataProvider {
             return createHistoryTool(toolConfig);
         }
         if (CALLBACK_SUB_SESSION_TOOL_NAME.equals(toolConfig.getId())) {
-            return new SubSessionCallbackTool(toolConfig, defaultSubSessionCallback);
+            return new SubSessionCallbackTool(toolConfig, defaultSubSessionCallback,
+                    agentContextManagerProvider.getObject());
         }
         if (SEND_RESULT_TO_PARENT_TOOL_NAME.equals(toolConfig.getId())) {
             return new SendResultToParentTool(toolConfig);

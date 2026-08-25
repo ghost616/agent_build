@@ -1,0 +1,163 @@
+package com.ghost616.platform.service.agent;
+
+import com.ghost616.agentbase.dto.model.Message;
+import com.ghost616.agentbase.enums.SubSessionOpenMode;
+import com.ghost616.agentbase.service.agent.AgentExecutionContext;
+import com.ghost616.agentbase.service.agent.invoker.SubSessionCallback;
+import com.ghost616.platform.entity.AgentConfig;
+import com.ghost616.platform.entity.Session;
+import com.ghost616.platform.repository.AgentConfigMapper;
+import com.ghost616.platform.repository.SessionMapper;
+import com.ghost616.platform.util.IdConverter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+
+/**
+ * 子会话回调默认实现（@Component），实现 agent-base 的 {@link SubSessionCallback} 接口。
+ *
+ * <p>execute 根据子会话所属主会话的 subSessionOpenMode 分流：</p>
+ * <ul>
+ *   <li>WEBSOCKET 模式：先经 {@link SubSessionRunningCache} 检测子会话是否正在执行中——
+ *       命中返回错误 JSON「子会话正在运行，请等候」阻止重复触发；未命中记入运行缓存并调用
+ *       ctx.sendUserMessage 直接推送，返回提示消息，不阻塞、不写 subSessionDataMap；</li>
+ *   <li>TOOL_CALL 模式（默认）/主会话解析失败/配置缺失：走 CompletableFuture 阻塞等待 +
+ *       subSessionDataMap 逻辑，由前台工具流程回填结果。</li>
+ * </ul>
+ */
+@Component
+@RequiredArgsConstructor
+public class DefaultSubSessionCallback implements SubSessionCallback {
+
+    /** 子会话运行中错误返回内容（JSON），父会话工具循环可正常解析，不抛异常 */
+    private static final String RUNNING_ERROR_JSON = "{\"status\":\"error\",\"errMsg\":\"子会话正在运行，请等候\"}";
+
+    private final SessionMapper sessionMapper;
+    private final AgentConfigMapper agentConfigMapper;
+    private final SubSessionRunningCache subSessionRunningCache;
+
+    private final ConcurrentHashMap<Long, SubSessionData> subSessionDataMap = new ConcurrentHashMap<>();
+
+    @Override
+    public Message execute(AgentExecutionContext ctx, String sessionId, String userMessage, Boolean thinking) {
+        Long sid = IdConverter.parse(sessionId);
+        Session session = sessionMapper.selectById(sid);
+        if (session == null || session.getParentSessionId() == null) {
+            return null;
+        }
+        Long parentSessionId = session.getParentSessionId();
+
+        if (ctx != null && isWebSocketMode(session)) {
+            // a. 子会话运行缓存检测：正在执行中则返回错误 JSON，不重复发送、不写入缓存
+            if (subSessionRunningCache.contains(sid)) {
+                return Message.builder()
+                        .role("assistant")
+                        .content(RUNNING_ERROR_JSON)
+                        .build();
+            }
+            // b. 记录子会话开始执行，再推送消息
+            subSessionRunningCache.add(sid);
+            ctx.sendUserMessage(sessionId, userMessage, ctx.getModelId(), thinking);
+            String sessionName = session.getTitle();
+            if (sessionName == null || sessionName.isBlank()) {
+                sessionName = sessionId;
+            }
+            return Message.builder()
+                    .role("assistant")
+                    .content("已发送消息到子会话" + sessionName + "，请等候子会话返回消息")
+                    .build();
+        }
+
+        CompletableFuture<Message> messageResult = new CompletableFuture<>();
+        SubSessionData data = new SubSessionData(sid, userMessage, thinking, messageResult);
+        subSessionDataMap.put(parentSessionId, data);
+
+        try {
+            return messageResult.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("SubSession execution interrupted", e);
+        } catch (ExecutionException e) {
+            throw new RuntimeException("SubSession execution failed", e.getCause());
+        } finally {
+            subSessionDataMap.remove(parentSessionId);
+        }
+    }
+
+    public SubSessionData getSubSessionData(Long parentSessionId) {
+        return subSessionDataMap.get(parentSessionId);
+    }
+
+    /**
+     * 判断子会话所属主会话配置的子会话打开方式是否为 WEBSOCKET。
+     * 主会话解析失败或智能体配置缺失时返回 false，由调用方按默认（TOOL_CALL）行为处理。
+     */
+    private boolean isWebSocketMode(Session childSession) {
+        Long mainSessionId = resolveMainSessionId(childSession);
+        if (mainSessionId == null) {
+            return false;
+        }
+        Session mainSession = sessionMapper.selectById(mainSessionId);
+        if (mainSession == null || mainSession.getAgentId() == null) {
+            return false;
+        }
+        AgentConfig agentConfig = agentConfigMapper.selectById(mainSession.getAgentId());
+        return agentConfig != null && SubSessionOpenMode.WEBSOCKET == agentConfig.getSubSessionOpenMode();
+    }
+
+    /**
+     * 从子会话的 parentSessionId 出发，沿 parentSessionId 链解析主会话（无父会话的根）。
+     *
+     * @return 主会话 ID；解析失败（会话缺失或出现环）时返回 null
+     */
+    private Long resolveMainSessionId(Session childSession) {
+        Long current = childSession.getParentSessionId();
+        Set<Long> visited = new HashSet<>();
+        while (current != null && visited.add(current)) {
+            Session session = sessionMapper.selectById(current);
+            if (session == null) {
+                return null;
+            }
+            if (session.getParentSessionId() == null) {
+                return current;
+            }
+            current = session.getParentSessionId();
+        }
+        return null;
+    }
+
+    public static class SubSessionData {
+        private final Long childSessionId;
+        private final String userMessage;
+        private final Boolean thinking;
+        private final CompletableFuture<Message> messageResult;
+
+        public SubSessionData(Long childSessionId, String userMessage, Boolean thinking, CompletableFuture<Message> messageResult) {
+            this.childSessionId = childSessionId;
+            this.userMessage = userMessage;
+            this.thinking = thinking;
+            this.messageResult = messageResult;
+        }
+
+        public Long getChildSessionId() {
+            return childSessionId;
+        }
+
+        public String getUserMessage() {
+            return userMessage;
+        }
+
+        public Boolean getThinking() {
+            return thinking;
+        }
+
+        public CompletableFuture<Message> getMessageResult() {
+            return messageResult;
+        }
+    }
+}

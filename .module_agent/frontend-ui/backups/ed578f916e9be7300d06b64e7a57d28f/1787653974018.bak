@@ -1,0 +1,405 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const mockPost = vi.hoisted(() => vi.fn());
+const mockGet = vi.hoisted(() => vi.fn());
+const mockFetch = vi.hoisted(() => vi.fn());
+
+vi.mock('../api', () => ({
+  default: {
+    post: mockPost,
+    get: mockGet,
+  },
+}));
+
+import { stopChat, listChildSessions, getSubSessionData, completeSubSession, getBrowserExtension, getToolScript, fetchConversationId, getConversationMessages, getSessionMessagesRange, getSessionMessages } from '../session';
+
+describe('fetchConversationId', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it('应调用 GET /conversation-id 并返回 conversationId', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: { conversationId: 'conv-123' } } });
+    const result = await fetchConversationId();
+    expect(mockGet).toHaveBeenCalledWith('/conversation-id');
+    expect(result).toBe('conv-123');
+  });
+
+  it('应在不同响应下正确返回 conversationId', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: { conversationId: 'conv-456' } } });
+    const result = await fetchConversationId();
+    expect(result).toBe('conv-456');
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockGet.mockRejectedValueOnce(testError);
+    await expect(fetchConversationId()).rejects.toThrow('Network Error');
+  });
+});
+
+describe('getConversationMessages', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it('应调用 GET /conversations/{conversationId}/messages', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getConversationMessages('conv-123');
+    expect(mockGet).toHaveBeenCalledWith('/conversations/conv-123/messages');
+  });
+
+  it('应在不同 conversationId 下正确拼接 URL', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getConversationMessages('conv-a');
+    expect(mockGet).toHaveBeenCalledWith('/conversations/conv-a/messages');
+
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getConversationMessages('conv-b');
+    expect(mockGet).toHaveBeenCalledWith('/conversations/conv-b/messages');
+  });
+
+  it('应返回 SessionMessage 数组', async () => {
+    const fakeMessages = [
+      {
+        id: 'm1',
+        sessionId: 's1',
+        conversationId: 'conv-1',
+        role: 'user',
+        content: 'hello',
+        sequenceNum: 1,
+        createTime: '2026-01-01T00:00:00',
+      },
+    ];
+    mockGet.mockResolvedValueOnce({ data: { data: fakeMessages } });
+    const result = await getConversationMessages('conv-1');
+    expect(result).toEqual(fakeMessages);
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockGet.mockRejectedValueOnce(testError);
+    await expect(getConversationMessages('conv-1')).rejects.toThrow('Network Error');
+  });
+});
+
+describe('getSessionMessages', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it('应调用 GET /sessions/{sessionId}/messages（不传参数时不带查询参数）', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getSessionMessages('session-123');
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-123/messages', { params: undefined });
+  });
+
+  it('传 { userInput: true } 时应透传到查询参数', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getSessionMessages('session-123', { userInput: true });
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-123/messages', {
+      params: { userInput: true },
+    });
+  });
+
+  it('传 { userInput: false } 时应透传到查询参数', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getSessionMessages('session-456', { userInput: false });
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-456/messages', {
+      params: { userInput: false },
+    });
+  });
+
+  it('应在不同 sessionId 下正确拼接 URL', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getSessionMessages('session-a');
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-a/messages', { params: undefined });
+
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getSessionMessages('session-b', { userInput: true });
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-b/messages', {
+      params: { userInput: true },
+    });
+  });
+
+  it('应返回 SessionMessage 数组', async () => {
+    const fakeMessages = [
+      {
+        id: 'm1',
+        sessionId: 's1',
+        role: 'user',
+        userInput: true,
+        content: 'hello',
+        sequenceNum: 1,
+        createTime: '2026-01-01T00:00:00',
+      },
+    ];
+    mockGet.mockResolvedValueOnce({ data: { data: fakeMessages } });
+    const result = await getSessionMessages('s1', { userInput: true });
+    expect(result).toEqual(fakeMessages);
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockGet.mockRejectedValueOnce(testError);
+    await expect(getSessionMessages('s1')).rejects.toThrow('Network Error');
+  });
+});
+
+describe('getSessionMessagesRange', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it('应调用 GET /sessions/{sessionId}/messages/range 并携带 startSeq/endSeq', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getSessionMessagesRange('session-123', 1, 3);
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-123/messages/range', {
+      params: { startSeq: 1, endSeq: 3 },
+    });
+  });
+
+  it('应在不同 sessionId 与序列号下正确拼接参数', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await getSessionMessagesRange('session-a', 5, 10);
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-a/messages/range', {
+      params: { startSeq: 5, endSeq: 10 },
+    });
+  });
+
+  it('应返回 SessionMessage 数组', async () => {
+    const fakeMessages = [
+      {
+        id: 'm1',
+        sessionId: 's1',
+        role: 'user',
+        content: 'hello',
+        sequenceNum: 1,
+        createTime: '2026-01-01T00:00:00',
+      },
+    ];
+    mockGet.mockResolvedValueOnce({ data: { data: fakeMessages } });
+    const result = await getSessionMessagesRange('s1', 1, 2);
+    expect(result).toEqual(fakeMessages);
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockGet.mockRejectedValueOnce(testError);
+    await expect(getSessionMessagesRange('s1', 1, 2)).rejects.toThrow('Network Error');
+  });
+});
+
+describe('stopChat', () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it('应调用 POST /chat/${sessionId}/stop 并返回 Promise<void>', async () => {
+    mockPost.mockResolvedValueOnce(undefined);
+    const sessionId = 'test-session-123';
+    await stopChat(sessionId);
+    expect(mockPost).toHaveBeenCalledWith(`/chat/${sessionId}/stop`);
+  });
+
+  it('应在不同 sessionId 下正确拼接 URL', async () => {
+    mockPost.mockResolvedValueOnce(undefined);
+    await stopChat('session-a');
+    expect(mockPost).toHaveBeenCalledWith('/chat/session-a/stop');
+
+    mockPost.mockResolvedValueOnce(undefined);
+    await stopChat('session-b');
+    expect(mockPost).toHaveBeenCalledWith('/chat/session-b/stop');
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockPost.mockRejectedValueOnce(testError);
+    await expect(stopChat('test-session')).rejects.toThrow('Network Error');
+  });
+});
+
+describe('listChildSessions', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it('应调用 GET /sessions/{parentId}/children', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await listChildSessions('parent-123');
+    expect(mockGet).toHaveBeenCalledWith('/sessions/parent-123/children');
+  });
+
+  it('应在不同 parentId 下正确拼接 URL', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await listChildSessions('parent-a');
+    expect(mockGet).toHaveBeenCalledWith('/sessions/parent-a/children');
+
+    mockGet.mockResolvedValueOnce({ data: { data: [] } });
+    await listChildSessions('parent-b');
+    expect(mockGet).toHaveBeenCalledWith('/sessions/parent-b/children');
+  });
+
+  it('应返回 Session 数组', async () => {
+    const fakeSessions = [
+      { id: 'child-1', title: '子会话1', agentId: 'a', modelId: 'm', createTime: '', updateTime: '' },
+    ];
+    mockGet.mockResolvedValueOnce({ data: { data: fakeSessions } });
+    const result = await listChildSessions('parent-123');
+    expect(result).toEqual(fakeSessions);
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockGet.mockRejectedValueOnce(testError);
+    await expect(listChildSessions('parent-123')).rejects.toThrow('Network Error');
+  });
+});
+
+describe('getSubSessionData', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it('应调用 GET /sessions/{sessionId}/sub-session-data', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: null } });
+    await getSubSessionData('session-123');
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-123/sub-session-data');
+  });
+
+  it('应在存在子会话数据时返回 SubSessionData', async () => {
+    const fakeData = { childSessionId: 'child-1', userMessage: '子会话请求' };
+    mockGet.mockResolvedValueOnce({ data: { data: fakeData } });
+    const result = await getSubSessionData('session-123');
+    expect(result).toEqual(fakeData);
+  });
+
+  it('应在无子会话数据时返回 null', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: null } });
+    const result = await getSubSessionData('session-123');
+    expect(result).toBeNull();
+  });
+
+  it('应正确处理不同 sessionId 的 URL 拼接', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: null } });
+    await getSubSessionData('session-a');
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-a/sub-session-data');
+
+    mockGet.mockResolvedValueOnce({ data: { data: null } });
+    await getSubSessionData('session-b');
+    expect(mockGet).toHaveBeenCalledWith('/sessions/session-b/sub-session-data');
+  });
+
+  it('应返回包含 thinking 字段的 SubSessionData（thinking=true）', async () => {
+    const fakeData = { childSessionId: 'child-1', userMessage: '子会话请求', thinking: true };
+    mockGet.mockResolvedValueOnce({ data: { data: fakeData } });
+    const result = await getSubSessionData('session-123');
+    expect(result).toEqual(fakeData);
+    expect(result!.thinking).toBe(true);
+  });
+
+  it('应返回包含 thinking 字段的 SubSessionData（thinking=false）', async () => {
+    const fakeData = { childSessionId: 'child-2', userMessage: '子会话请求2', thinking: false };
+    mockGet.mockResolvedValueOnce({ data: { data: fakeData } });
+    const result = await getSubSessionData('session-456');
+    expect(result).toEqual(fakeData);
+    expect(result!.thinking).toBe(false);
+  });
+
+  it('应返回不含 thinking 字段的 SubSessionData（thinking 可选）', async () => {
+    const fakeData = { childSessionId: 'child-3', userMessage: '子会话请求3' };
+    mockGet.mockResolvedValueOnce({ data: { data: fakeData } });
+    const result = await getSubSessionData('session-789');
+    expect(result).toEqual(fakeData);
+    expect(result!.thinking).toBeUndefined();
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockGet.mockRejectedValueOnce(testError);
+    await expect(getSubSessionData('session-123')).rejects.toThrow('Network Error');
+  });
+});
+
+describe('completeSubSession', () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it('应调用 POST /sessions/{sessionId}/complete-sub-session 并返回 Promise<void>', async () => {
+    mockPost.mockResolvedValueOnce(undefined);
+    await completeSubSession('session-123');
+    expect(mockPost).toHaveBeenCalledWith('/sessions/session-123/complete-sub-session');
+  });
+
+  it('应正确处理不同 sessionId 的 URL 拼接', async () => {
+    mockPost.mockResolvedValueOnce(undefined);
+    await completeSubSession('session-a');
+    expect(mockPost).toHaveBeenCalledWith('/sessions/session-a/complete-sub-session');
+
+    mockPost.mockResolvedValueOnce(undefined);
+    await completeSubSession('session-b');
+    expect(mockPost).toHaveBeenCalledWith('/sessions/session-b/complete-sub-session');
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockPost.mockRejectedValueOnce(testError);
+    await expect(completeSubSession('session-123')).rejects.toThrow('Network Error');
+  });
+});
+
+describe('getBrowserExtension', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('应调用 fetch /api/browser-tool/extension 并返回文本内容', async () => {
+    mockFetch.mockResolvedValueOnce({ text: () => Promise.resolve('var test = 1;') });
+    const result = await getBrowserExtension();
+    expect(mockFetch).toHaveBeenCalledWith('/api/browser-tool/extension');
+    expect(result).toBe('var test = 1;');
+  });
+
+  it('应返回原始文本而非 JSON 解析结果', async () => {
+    mockFetch.mockResolvedValueOnce({ text: () => Promise.resolve('plain text content') });
+    const result = await getBrowserExtension();
+    expect(result).toBe('plain text content');
+  });
+
+  it('应在 fetch 失败时抛出错误', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network Error'));
+    await expect(getBrowserExtension()).rejects.toThrow('Network Error');
+  });
+});
+
+describe('getToolScript', () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it('应调用 GET /browser-tool/tool-script/{id} 并返回字符串', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: '() => console.log("test")' } });
+    const result = await getToolScript('config-123');
+    expect(mockGet).toHaveBeenCalledWith('/browser-tool/tool-script/config-123');
+    expect(result).toBe('() => console.log("test")');
+  });
+
+  it('应 encodeURIComponent 处理特殊字符的 ID', async () => {
+    mockGet.mockResolvedValueOnce({ data: { data: '' } });
+    await getToolScript('special/id?foo=bar');
+    expect(mockGet).toHaveBeenCalledWith('/browser-tool/tool-script/special%2Fid%3Ffoo%3Dbar');
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    mockGet.mockRejectedValueOnce(new Error('Network Error'));
+    await expect(getToolScript('config-123')).rejects.toThrow('Network Error');
+  });
+});
+
+

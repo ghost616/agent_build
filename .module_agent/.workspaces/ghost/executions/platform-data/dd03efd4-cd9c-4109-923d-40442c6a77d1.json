@@ -1,0 +1,23 @@
+[
+  {
+    "plan_id": "plan_84142b7c-d8e1-46ed-a26e-aba36d9f44a7",
+    "plan": "子会话删除功能——软删除持久化层",
+    "modified_files": [
+      "platform-data/src/main/java/com/ghost616/platform/entity/Message.java",
+      "platform-data/src/main/java/com/ghost616/platform/entity/SessionTool.java",
+      "platform-data/src/main/java/com/ghost616/platform/entity/SessionSkill.java",
+      "platform-data/src/main/resources/schema-message.sql",
+      "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java",
+      "platform-data/src/main/resources/schema.sql",
+      "platform-data/src/main/java/com/ghost616/platform/config/PrimarySchemaMigration.java",
+      "platform-data/src/main/java/com/ghost616/platform/repository/MessageMapper.java",
+      "platform-data/src/test/java/com/ghost616/platform/repository/MessageMapperTest.java",
+      "platform-data/src/test/java/com/ghost616/platform/entity/SessionEntityTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/migration/SchemaMigrationTest.java",
+      "platform-data/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker",
+      "platform-app/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker"
+    ],
+    "summary": "执行总结：本轮完成子会话删除的软删除持久化层，共修改 11 个文件、新增 2 个测试资源文件。1) Message/SessionTool/SessionSkill 实体新增 @TableLogic(value=\"0\", delval=\"1\") deleted 字段（Integer）；Session 已通过 BaseEntity 继承该字段（session 表已有 deleted 列），未重复声明；2) schema-message.sql message 表新增 deleted INTEGER DEFAULT 0 列，MessageSchemaMigration 新增 message.deleted 迁移（消息迁移总数 15→16）；3) 实测 schema.sql 与运行时库 session_tool/session_skill 表均无 deleted 列（任务描述\"表已有列\"与实际不符），已补 schema.sql 两表 DDL deleted INTEGER DEFAULT 0 列及 PrimarySchemaMigration 两个迁移条目（主迁移总数 90→92）；4) MessageMapper 的 rollbackBySessionIdAndGeSequenceNum/selectByConversationId/countUserMessages/findNthUserSequenceNum 四个自定义 SQL 手动追加 AND deleted = 0 条件（@TableLogic 不作用于自定义 SQL）；5) 测试同步：MessageMapperTest 新增 5 个软删除过滤用例（测试表加 deleted 列），SessionEntityTest 新增 3 个 deleted 字段用例，platform-app SchemaMigrationTest 计数 PRIMARY 90→92、MESSAGE 15→16。\n测试总结：全部测试通过。单元测试 MessageMapperTest+SessionEntityTest 16/16 通过（含 8 个新用例）；platform-data 全量回归 75/75 通过；platform-app SchemaMigrationTest 15/15 通过（PRIMARY_ALTER_COUNT=92、MESSAGE_ALTER_COUNT=16 与实际迁移条数一致）；5 模块编译 BUILD SUCCESS。总计 106 个自动化用例全部通过，失败 0，跳过 0（E2E 不适用，纯后端变更）。环境说明：JDK 21 下 Mockito inline mock maker 初始化失败（JEP 451），已在 platform-data/platform-app test resources 添加 mock-maker-subclass 配置解决（建议保留）；agent-base 既有测试源码编译失败为遗留问题，与本变更无关。",
+    "errors": []
+  }
+]

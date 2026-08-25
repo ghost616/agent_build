@@ -44,6 +44,7 @@ class MessageMapperTest {
                         "rollback TINYINT NOT NULL DEFAULT 0," +
                         "user_input TINYINT(1) DEFAULT 1," +
                         "conversation_id VARCHAR(50)," +
+                        "deleted INTEGER DEFAULT 0," +
                         "create_time TIMESTAMP)");
             }
         }
@@ -92,6 +93,26 @@ class MessageMapperTest {
                 ps.setInt(5, sequenceNum);
                 ps.setInt(6, rollback);
                 ps.setInt(7, userInput);
+                ps.setString(8, conversationId);
+                ps.setString(9, createTime);
+                ps.executeUpdate();
+            }
+        }
+    }
+
+    private void insertMessageWithDeleted(long id, long sessionId, String role, int sequenceNum, int rollback,
+                                          int deleted, String conversationId, String createTime) throws Exception {
+        String sql = "INSERT INTO message (id, session_id, role, content, sequence_num, rollback, deleted, conversation_id, create_time) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(JDBC_URL, "sa", "")) {
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, id);
+                ps.setLong(2, sessionId);
+                ps.setString(3, role);
+                ps.setString(4, "content-" + id);
+                ps.setInt(5, sequenceNum);
+                ps.setInt(6, rollback);
+                ps.setInt(7, deleted);
                 ps.setString(8, conversationId);
                 ps.setString(9, createTime);
                 ps.executeUpdate();
@@ -191,6 +212,69 @@ class MessageMapperTest {
             assertEquals(6, mapper.findNthUserSequenceNum(100L, 2));
             assertEquals(7, mapper.findNthUserSequenceNum(100L, 3));
             assertTrue(mapper.findNthUserSequenceNum(100L, 4) == null);
+        }
+    }
+
+    @Test
+    void selectByConversationId_过滤已软删除记录() throws Exception {
+        insertMessageWithDeleted(1, 100L, "user", 1, 0, 1, "conv-1", "2026-01-01 10:00:00");
+        insertMessageWithDeleted(2, 100L, "user", 2, 0, 0, "conv-1", "2026-01-01 10:00:01");
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            MessageMapper mapper = session.getMapper(MessageMapper.class);
+            List<Message> result = mapper.selectByConversationId("conv-1");
+
+            assertEquals(1, result.size());
+            assertEquals(2L, result.get(0).getId());
+        }
+    }
+
+    @Test
+    void countUserMessages_排除软删除消息() throws Exception {
+        insertMessageWithDeleted(1, 100L, "user", 1, 0, 0, "conv-1", "2026-01-01 10:00:00");
+        insertMessageWithDeleted(2, 100L, "user", 2, 0, 1, "conv-1", "2026-01-01 10:00:01");
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            MessageMapper mapper = session.getMapper(MessageMapper.class);
+            assertEquals(1L, mapper.countUserMessages(100L));
+        }
+    }
+
+    @Test
+    void findNthUserSequenceNum_排除软删除消息() throws Exception {
+        insertMessageWithDeleted(1, 100L, "user", 1, 0, 0, "conv-1", "2026-01-01 10:00:00");
+        insertMessageWithDeleted(2, 100L, "user", 2, 0, 1, "conv-1", "2026-01-01 10:00:01");
+        insertMessageWithDeleted(3, 100L, "user", 3, 0, 0, "conv-1", "2026-01-01 10:00:02");
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            MessageMapper mapper = session.getMapper(MessageMapper.class);
+            assertEquals(1, mapper.findNthUserSequenceNum(100L, 0));
+            assertEquals(3, mapper.findNthUserSequenceNum(100L, 1));
+            assertTrue(mapper.findNthUserSequenceNum(100L, 2) == null);
+        }
+    }
+
+    @Test
+    void rollbackBySessionIdAndGeSequenceNum_批量回滚非软删除消息() throws Exception {
+        insertMessageWithDeleted(1, 100L, "user", 1, 0, 0, "conv-1", "2026-01-01 10:00:00");
+        insertMessageWithDeleted(2, 100L, "user", 2, 0, 0, "conv-1", "2026-01-01 10:00:01");
+        insertMessageWithDeleted(3, 100L, "user", 3, 0, 0, "conv-1", "2026-01-01 10:00:02");
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            MessageMapper mapper = session.getMapper(MessageMapper.class);
+            assertEquals(2, mapper.rollbackBySessionIdAndGeSequenceNum(100L, 2));
+        }
+    }
+
+    @Test
+    void rollbackBySessionIdAndGeSequenceNum_不影响已软删除消息() throws Exception {
+        insertMessageWithDeleted(1, 100L, "user", 1, 0, 0, "conv-1", "2026-01-01 10:00:00");
+        insertMessageWithDeleted(2, 100L, "user", 2, 0, 1, "conv-1", "2026-01-01 10:00:01");
+        insertMessageWithDeleted(3, 100L, "user", 3, 0, 0, "conv-1", "2026-01-01 10:00:02");
+
+        try (SqlSession session = sqlSessionFactory.openSession()) {
+            MessageMapper mapper = session.getMapper(MessageMapper.class);
+            assertEquals(2, mapper.rollbackBySessionIdAndGeSequenceNum(100L, 1));
         }
     }
 }

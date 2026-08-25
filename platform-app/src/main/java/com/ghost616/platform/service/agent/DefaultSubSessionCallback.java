@@ -89,6 +89,25 @@ public class DefaultSubSessionCallback implements SubSessionCallback {
         }
     }
 
+    /**
+     * 判断子会话是否存在：sessionMapper.selectById 非 null 返回 true。
+     * Session 实体 {@code deleted} 字段带 @TableLogic，selectById 自动附加 deleted=0，
+     * 已假删（deleted=1）的会话返回 null，因此软删会话被正确判定为不存在。
+     */
+    @Override
+    public boolean exists(String childSessionId) {
+        Long sid;
+        try {
+            sid = IdConverter.parse(childSessionId);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+        if (sid == null) {
+            return false;
+        }
+        return sessionMapper.selectById(sid) != null;
+    }
+
     public SubSessionData getSubSessionData(Long parentSessionId) {
         return subSessionDataMap.get(parentSessionId);
     }

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS message (
     rollback     TINYINT NOT NULL DEFAULT 0,
     user_input   TINYINT(1) DEFAULT 1,
     conversation_id VARCHAR(50),
+    deleted      INTEGER DEFAULT 0,
     create_time  TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_message_session_id ON message(session_id);

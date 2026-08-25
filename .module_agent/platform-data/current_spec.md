@@ -13,6 +13,8 @@
 - AgentConfig 实体新增 subSessionOpenMode 字段（SubSessionOpenMode 枚举：WEBSOCKET/TOOL_CALL，@EnumValue 存储 code，默认 TOOL_CALL，映射 sub_session_open_mode 列，表示子会话打开方式）
 - **MessageImage**：消息图片映射实体，映射 message_image 表，含 id(雪花ID，@JsonSerialize ToStringSerializer)/messageId(关联消息ID)/imgId(图片标识 String)/imgText(大模型图像理解结果文本) 字段，用于大模型图像理解场景的图片-消息映射持久化
 - **Message**：消息实体，映射 message 表，不继承 BaseEntity，含 id(雪花ID，@JsonSerialize ToStringSerializer)/userId/sessionId/role/content/reasoning/sequenceNum/toolCallId/toolResult/tokenUsage/conversationId/rollback/userInput(Boolean，@TableField("user_input")，标识消息是否为用户输入型，用于区分用户直接输入与会话间传递的 user 消息，默认 1 存量视为用户输入)/createTime 字段
+- 软删除字段扩展：Message（不继承 BaseEntity）、SessionTool、SessionSkill 实体新增 @TableLogic(value=\"0\", delval=\"1\") deleted 字段（Integer，0=未删除/1=已删除），MyBatis-Plus BaseMapper 自动附加 deleted=0 条件并将 delete 转为 UPDATE 软删除；Session 经 BaseEntity 继承同名 @TableLogic deleted 字段（session 表已有 deleted 列）
+
 ## 数据访问层
 
 - **MessageMapper**：继承 BaseMapper\<Message\>，额外提供 rollbackBySessionIdAndGeSequenceNum 批量更新方法、selectByConversationId 按会话查询未回滚消息（按创建时间升序）、countUserMessages 统计会话下 user 角色未回滚消息总数、findNthUserSequenceNum 查找会话内第 n 个 user 未回滚消息的 sequenceNum（按 sequence_num 升序，LIMIT 1 OFFSET n）；添加 @DS("message") 注解路由至副数据源
@@ -20,6 +22,8 @@
 - **多数据源支持**：platform-data 引入 dynamic-datasource-spring-boot3-starter 4.1.1，支持 @DS 注解按 Mapper 动态路由主/副数据源
 - **MessageImageMapper**：MessageImage 实体的 MyBatis-Plus Mapper 接口，继承 BaseMapper；添加 @DS("message") 注解路由至消息数据源，与 message/agent_log/message_tool_call 同库
 - MessageMapper.countUserMessages/findNthUserSequenceNum 的 @Select SQL 增加 AND user_input = 1 条件：仅统计/查找用户输入型（user_input=1）user 消息，排除会话间传递的 user 消息（记忆点计算用）
+- MessageMapper 的 selectByConversationId/countUserMessages/findNthUserSequenceNum/rollbackBySessionIdAndGeSequenceNum 四个自定义 @Select/@Update SQL 手动追加 AND deleted = 0 条件（@TableLogic 不作用于自定义 SQL），软删除消息不参与查询、统计与回滚
+
 ## 数据库初始化与迁移
 
 - **schema.sql** (classpath 根路径)：主数据源 DDL 初始化脚本，定义除 message、agent_log、message_tool_call 外的所有业务表（model_config、tool_config、session、session_tool、agent_config、agent_tool、agent_skill、skill_config、skill_tool、session_variable、session_skill、evaluation、evaluation_result、agent_evaluation、knowledge_base、knowledge_file、agent_knowledge_base）的建表语句和索引
@@ -39,6 +43,8 @@ session 表新增 memory_prompt（VARCHAR(500)）列，PrimarySchemaMigration �
 - agent_config 表新增 sub_session_open_mode（VARCHAR(32)，默认 'TOOL_CALL'）列；AgentConfig 实体新增 subSessionOpenMode 字段（SubSessionOpenMode 枚举，默认 TOOL_CALL）
 - schema-message.sql 新增 message_image 表建表语句（id/message_id/img_id VARCHAR(255)/img_text MEDIUMTEXT）及 idx_message_image_message_id 索引；MessageSchemaMigration 新增 message_image.message_id/img_id/img_text 三条 ALTER 增量迁移（迁移总数 11→14）
 - message 表新增 user_input TINYINT(1) DEFAULT 1 列（区分用户输入与会话间传递的 user 消息，存量默认视为用户输入）；MessageSchemaMigration 新增 message.user_input（TINYINT(1)，默认 '1'）迁移条目（消息数据源迁移总数 14→15）；platform-app SchemaMigrationTest MESSAGE_ALTER_COUNT 同步 14→15
+- 软删除列迁移：schema-message.sql message 表新增 deleted INTEGER DEFAULT 0 列；MessageSchemaMigration 新增 message.deleted（INTEGER，默认 '0'）迁移条目（消息数据源迁移总数 15→16）；schema.sql session_tool/session_skill 表新增 deleted INTEGER DEFAULT 0 列；PrimarySchemaMigration 新增 session_tool.deleted、session_skill.deleted 两个迁移条目（主数据源迁移总数 90→92）；platform-app SchemaMigrationTest 计数常量同步更新（PRIMARY 90→92、MESSAGE 15→16）
+
 ## 统一错误码与异常
 
 - **ErrorCode**：统一业务错误码枚举（com.ghost616.platform.enums.ErrorCode），共 31 个，覆盖 SYS/MODEL/TOOL/AGENT/SKILL/SESSION/EVAL/AGENT-EVAL/KNOWLEDGE 各业务域错误码，提供 getCode/getMessage。含 SYSTEM_ERROR（SYS-001）、PARAM_INVALID（SYS-002）、AGENT_MEMORY_NOT_ENABLED（AGENT-CONFIG-005，智能体未开启记忆功能）等

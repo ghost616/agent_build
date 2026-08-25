@@ -1,10 +1,16 @@
 package com.ghost616.platform.session;
 
 import com.ghost616.platform.dto.session.SessionDTO;
+import com.ghost616.platform.entity.Message;
 import com.ghost616.platform.entity.Session;
+import com.ghost616.platform.entity.SessionSkill;
+import com.ghost616.platform.entity.SessionTool;
+import com.ghost616.platform.entity.SessionVariable;
 import com.ghost616.platform.repository.SessionMapper;
 import com.ghost616.platform.repository.AgentToolMapper;
+import com.ghost616.platform.repository.SessionSkillMapper;
 import com.ghost616.platform.repository.SessionToolMapper;
+import com.ghost616.platform.repository.SessionVariableMapper;
 import com.ghost616.platform.service.session.SessionServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
@@ -59,6 +65,10 @@ class SessionServiceImplTest {
     private com.ghost616.platform.service.agent.DefaultMessageDataProvider defaultMessageDataProvider;
     @Mock
     private com.ghost616.platform.service.message.MessageService messageService;
+    @Mock
+    private SessionVariableMapper sessionVariableMapper;
+    @Mock
+    private SessionSkillMapper sessionSkillMapper;
 
     @InjectMocks
     private SessionServiceImpl sessionService;
@@ -73,6 +83,10 @@ class SessionServiceImplTest {
     void setUp() {
         // 初始化实体表信息，使 LambdaQueryWrapper 可解析 lambda 列名（参考 AgentConfigUserIsolationTest）
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Session.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), SessionTool.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), SessionVariable.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), SessionSkill.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), Message.class);
 
         User user = new User();
         user.setId(CURRENT_USER_ID);
@@ -726,5 +740,98 @@ class SessionServiceImplTest {
 
         assertEquals(1, result.size());
         assertNull(result.get(0).getIsEvaluation());
+    }
+
+    // ========== deleteSession 级联假删 ==========
+
+    @Test
+    void deleteSession_会话不存在_抛SESSION_NOT_FOUND() {
+        when(sessionMapper.selectById(999L)).thenReturn(null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> sessionService.deleteSession(999L));
+        assertEquals(ErrorCode.SESSION_NOT_FOUND, ex.getErrorCode());
+        verify(sessionMapper, never()).deleteById(any());
+        verify(sessionToolMapper, never()).delete(any());
+        verify(sessionVariableMapper, never()).delete(any());
+        verify(sessionSkillMapper, never()).delete(any());
+        verify(messageMapper, never()).delete(any());
+    }
+
+    @Test
+    void deleteSession_级联假删_各关联数据与缓存清理() {
+        Session entity = new Session();
+        entity.setId(100L);
+        entity.setIsChild(false);
+        entity.setTitle("to-delete");
+        when(sessionMapper.selectById(100L)).thenReturn(entity);
+
+        sessionService.deleteSession(100L);
+
+        // 会话工具/变量/技能关联假删（@TableLogic delete → UPDATE deleted=1）
+        verify(sessionToolMapper).delete(any());
+        verify(sessionVariableMapper).delete(any());
+        verify(sessionSkillMapper).delete(any());
+        // 消息假删（message 数据源）
+        verify(messageMapper).delete(any());
+        // 会话假删（@TableLogic deleteById → UPDATE session SET deleted=1）
+        verify(sessionMapper).deleteById(100L);
+        // 上下文与工具缓存清理保留
+        verify(agentContextManager).remove("100");
+        verify(toolManager).clearSessionCache("100");
+    }
+
+    @Test
+    void deleteSession_各假删条件按会话ID过滤() {
+        Session entity = new Session();
+        entity.setId(100L);
+        when(sessionMapper.selectById(100L)).thenReturn(entity);
+
+        sessionService.deleteSession(100L);
+
+        // session_tool 删除条件按 sessionId 过滤
+        ArgumentCaptor<LambdaQueryWrapper<SessionTool>> toolCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(sessionToolMapper).delete(toolCaptor.capture());
+        LambdaQueryWrapper<SessionTool> toolWrapper = toolCaptor.getValue();
+        toolWrapper.getSqlSegment();
+        assertTrue(toolWrapper.getParamNameValuePairs().containsValue(100L),
+                "session_tool 应过滤 sessionId: " + toolWrapper.getParamNameValuePairs());
+
+        // session_variable 删除条件按 sessionId 过滤
+        ArgumentCaptor<LambdaQueryWrapper<SessionVariable>> varCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(sessionVariableMapper).delete(varCaptor.capture());
+        LambdaQueryWrapper<SessionVariable> varWrapper = varCaptor.getValue();
+        varWrapper.getSqlSegment();
+        assertTrue(varWrapper.getParamNameValuePairs().containsValue(100L),
+                "session_variable 应过滤 sessionId: " + varWrapper.getParamNameValuePairs());
+
+        // session_skill 删除条件按 sessionId 过滤
+        ArgumentCaptor<LambdaQueryWrapper<SessionSkill>> skillCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(sessionSkillMapper).delete(skillCaptor.capture());
+        LambdaQueryWrapper<SessionSkill> skillWrapper = skillCaptor.getValue();
+        skillWrapper.getSqlSegment();
+        assertTrue(skillWrapper.getParamNameValuePairs().containsValue(100L),
+                "session_skill 应过滤 sessionId: " + skillWrapper.getParamNameValuePairs());
+
+        // message 删除条件按 sessionId 过滤
+        ArgumentCaptor<LambdaQueryWrapper<Message>> msgCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(messageMapper).delete(msgCaptor.capture());
+        LambdaQueryWrapper<Message> msgWrapper = msgCaptor.getValue();
+        msgWrapper.getSqlSegment();
+        assertTrue(msgWrapper.getParamNameValuePairs().containsValue(100L),
+                "message 应过滤 sessionId: " + msgWrapper.getParamNameValuePairs());
+    }
+
+    @Test
+    void deleteSession_不递归删除子孙会话() {
+        Session entity = new Session();
+        entity.setId(100L);
+        entity.setIsChild(false);
+        when(sessionMapper.selectById(100L)).thenReturn(entity);
+
+        sessionService.deleteSession(100L);
+
+        // 仅对当前会话执行一次假删，不按 parentSessionId 查询/删除子孙会话
+        verify(sessionMapper).deleteById(100L);
+        verify(sessionMapper, never()).selectList(any());
     }
 }

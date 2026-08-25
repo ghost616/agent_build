@@ -1,0 +1,13 @@
+{
+  "plan_id": "plan_82b5f3a3-4565-4214-b1bc-bfb2c6aad724",
+  "module_name": "frontend-ui",
+  "development_plan": "子会话删除功能——前端子会话标签删除交互。任务：1) src/services/session.ts 新增/复用删除会话接口（DELETE /sessions/{id}，如 deleteSession 服务方法）；2) AgentChat.tsx 子会话标签（sessionTabItems 中 i>0 的非主会话 Tab label）添加删除图标（如 DeleteOutlined，点击不触发标签切换）；点击后弹 Modal.confirm 确认框（提示删除子会话确认文案），确认后调用删除接口；3) 删除成功后：若删除的是当前激活子会话则从 activePath 移除并切回父会话标签；更新 childListCache（从父会话子列表移除该子会话）；清理对应 childStreams[childId]（如有）；4) 删除失败提示错误信息；5) 同步更新/新增相关测试。",
+  "session_id": "3fc765eb-2e87-448c-a478-30e9b8ebbbb3",
+  "modified_files": [
+    "src/pages/sessions/AgentChat.tsx",
+    "src/pages/sessions/__tests__/AgentChat.test.tsx",
+    "src/services/__tests__/session.test.ts",
+    "src/services/session.ts",
+    "e2e/AgentChat.spec.ts"
+  ]
+}

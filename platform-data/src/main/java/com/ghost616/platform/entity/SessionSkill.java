@@ -3,6 +3,7 @@ package com.ghost616.platform.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
@@ -25,4 +26,7 @@ public class SessionSkill {
 
     @TableField("session_auth")
     private SessionAuthType sessionAuth;
+
+    @TableLogic(value = "0", delval = "1")
+    private Integer deleted;
 }

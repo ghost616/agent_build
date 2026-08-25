@@ -1,0 +1,14 @@
+[
+  {
+    "plan_id": "plan_09f05fd3-23c6-4dee-b8d2-6c32a83dc16a",
+    "plan": "子会话删除功能：deleteSession 级联软删、exists 覆写、工具注入核对、测试同步",
+    "modified_files": [
+      "platform-app/src/main/java/com/ghost616/platform/service/session/SessionServiceImpl.java",
+      "platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultSubSessionCallback.java",
+      "platform-app/src/test/java/com/ghost616/platform/session/SessionServiceImplTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultSubSessionCallbackTest.java"
+    ],
+    "summary": "执行总结：本轮修改 4 个文件——\n1) SessionServiceImpl.deleteSession 扩展为级联假删：新增 session_variable（SessionVariableMapper.delete）与 session_skill（SessionSkillMapper.delete）假删，消息假删（messageMapper.delete，@TableLogic 自动生成 UPDATE message SET deleted=1 WHERE session_id=xxx AND deleted=0），session 与 session_tool 假删沿用 @TableLogic deleteById/delete（自动 deleted=1）；保留 agentContextManager.remove 与 toolManager.clearSessionCache；不递归删除子孙会话；移除方法 @Transactional（与 rollback 拆分事务策略一致，避免主库事务内 @DS(\"message\") 路由失效），新增注入 SessionVariableMapper/SessionSkillMapper。\n2) DefaultSubSessionCallback 新增覆写 exists(String)：IdConverter.parse 后 sessionMapper.selectById 非 null 返回 true（Session @TableLogic 自动排除软删会话），null/空白/无效格式返回 false 且不查库。\n3) DefaultToolDataProvider 核对：AgentContextManager 已注入、getCustomInvoker 已用三参构造 new SubSessionCallbackTool(toolConfig, defaultSubSessionCallback, agentContextManager)，测试已适配——agent-integration 力牧已完成，本轮未重复修改。\n4) 测试同步：SessionServiceImplTest 新增 2 个 mapper mock + 4 个实体 TableInfo 初始化 + 4 个 deleteSession 用例（不存在抛 SESSION_NOT_FOUND / 级联假删与缓存清理 / 各假删条件按会话 ID 过滤 / 不递归删除子孙会话）；DefaultSubSessionCallbackTest 新增 5 个 exists 用例。\n\n测试总结：全部测试通过。编译测试 1 项通过（mvn -pl platform-app -am test-compile BUILD SUCCESS，5 模块全部编译通过）；单元测试 100/100 通过（SessionServiceImplTest 40/40 含新增 4 个、DefaultSubSessionCallbackTest 19/19 含新增 5 个、DefaultToolDataProviderTest 41/41 三参构造回归），失败 0、跳过 0。环境说明：首次不带 -am 单独构建时因本地 m2 仓库 agent-integration 1.0.0-SNAPSHOT 为 2026-08-17 旧 jar（无 SubSessionCallbackTool 三参构造器）报 NoSuchMethodError，属环境问题非代码缺陷，改用 -am reactor 模式（从源码构建 agent-integration）后全部通过；建议 CI 单独运行 platform-app 测试前先 mvn -pl agent-integration install -DskipTests。",
+    "errors": []
+  }
+]

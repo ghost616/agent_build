@@ -1093,6 +1093,148 @@ class AgentContextManagerTest {
     }
 
     @Nested
+    class RemoveChildSessionTest {
+
+        private final String parentSessionId = "1";
+        private final String childSessionId = "2";
+
+        /**
+         * 构建并缓存父会话上下文（懒构建触发完整构建），childSessions 初始包含 childSessionId("2") 与 "3" 两个子会话。
+         */
+        private AgentContextManager.AgentSessionContext buildParentWithChildren() {
+            when(dataProvider.loadAgentContext(parentSessionId)).thenReturn(
+                    new ContextDataProvider.AgentContextData(agentId, "parent prompt", "200", 10, List.of(), Map.of(), null,
+                            List.of(new AgentExecutionContext.ChildSession(childSessionId, "child1", "desc1", "300"),
+                                    new AgentExecutionContext.ChildSession("3", "child2", "desc2", "300")), null, null));
+            when(sessionManager.getMessages(parentSessionId)).thenReturn(List.of());
+            when(toolManager.getSessionTools(eq(parentSessionId), anyBoolean())).thenReturn(List.of());
+            AgentContextManager.AgentSessionContext parentCtx = agentContextManager.build(parentSessionId).build();
+            // 触发懒构建，使 childSessions 共享引用进入 context
+            parentCtx.context();
+            return parentCtx;
+        }
+
+        private void stubChild(String childId, String parentId) {
+            when(dataProvider.loadAgentContext(childId)).thenReturn(
+                    new ContextDataProvider.AgentContextData(agentId, "child prompt", "200", 10, List.of(), Map.of(), parentId, null, null, null));
+        }
+
+        @Test
+        void 正向_软删子会话移除后父会话childSessions过滤掉该子会话() {
+            AgentContextManager.AgentSessionContext parentCtx = buildParentWithChildren();
+            // 第一次调用返回活跃数据（子会话入缓存），第二次返回 null（模拟软删后 loadAgentContext 查不到）
+            when(dataProvider.loadAgentContext(childSessionId)).thenReturn(
+                    new ContextDataProvider.AgentContextData(agentId, "child prompt", "200", 10, List.of(), Map.of(), parentSessionId, null, null, null),
+                    null);
+            agentContextManager.get(childSessionId); // 子会话入缓存
+            assertEquals(2, parentCtx.context().getChildSessions().size());
+
+            agentContextManager.remove(childSessionId);
+
+            List<AgentExecutionContext.ChildSession> children = parentCtx.context().getChildSessions();
+            assertEquals(1, children.size());
+            assertEquals("3", children.get(0).sessionId());
+        }
+
+        @Test
+        void 反向_活跃子会话remove不剪除父会话childSessions() {
+            AgentContextManager.AgentSessionContext parentCtx = buildParentWithChildren();
+            stubChild(childSessionId, parentSessionId);
+            agentContextManager.get(childSessionId); // 子会话入缓存
+            assertEquals(2, parentCtx.context().getChildSessions().size());
+
+            agentContextManager.remove(childSessionId);
+
+            assertEquals(2, parentCtx.context().getChildSessions().size(),
+                    "活跃子会话（rollback/普通驱逐）不应被从父缓存列表剪除");
+        }
+
+        @Test
+        void 正向_软删子会话移除后父会话为轻量条目不触发懒构建() {
+            // 父会话仅轻量构建（不访问 context()），childSessions 存于 agentContextData
+            when(dataProvider.loadAgentContext(parentSessionId)).thenReturn(
+                    new ContextDataProvider.AgentContextData(agentId, "parent prompt", "200", 10, List.of(), Map.of(), null,
+                            List.of(new AgentExecutionContext.ChildSession(childSessionId, "child1", "desc1", "300"),
+                                    new AgentExecutionContext.ChildSession("3", "child2", "desc2", "300")), null, null));
+            agentContextManager.build(parentSessionId).build();
+            when(dataProvider.loadAgentContext(childSessionId)).thenReturn(
+                    new ContextDataProvider.AgentContextData(agentId, "child prompt", "200", 10, List.of(), Map.of(), parentSessionId, null, null, null),
+                    null); // 第一次入缓存，第二次模拟软删
+            agentContextManager.get(childSessionId);
+
+            agentContextManager.remove(childSessionId);
+
+            // 剪枝直接操作 agentContextData 共享引用，未触发父上下文懒构建
+            verify(sessionManager, never()).getMessages(parentSessionId);
+            verify(toolManager, never()).getSessionTools(eq(parentSessionId), anyBoolean());
+            ContextDataProvider.AgentContextData parentData = agentContextManager.get(parentSessionId).agentContextData();
+            assertEquals(1, parentData.childSessions().size());
+            assertEquals("3", parentData.childSessions().get(0).sessionId());
+        }
+
+        @Test
+        void 正向_移除后子会话缓存条目被清除() {
+            buildParentWithChildren();
+            stubChild(childSessionId, parentSessionId);
+            AgentContextManager.AgentSessionContext childCtx = agentContextManager.get(childSessionId);
+            assertNotNull(childCtx, "get 未命中时应轻量构建并缓存子会话");
+
+            agentContextManager.remove(childSessionId);
+
+            assertNotSame(childCtx, agentContextManager.get(childSessionId),
+                    "移除后再次 get 应重建新条目而非复用旧缓存");
+        }
+
+        @Test
+        void 边界_父会话不在缓存中时移除软删子会话不抛异常() {
+            when(dataProvider.loadAgentContext(childSessionId)).thenReturn(
+                    new ContextDataProvider.AgentContextData(agentId, "child prompt", "200", 10, List.of(), Map.of(), "not-cached-parent", null, null, null),
+                    null); // 第一次入缓存，第二次模拟软删
+            agentContextManager.get(childSessionId);
+
+            assertDoesNotThrow(() -> agentContextManager.remove(childSessionId));
+        }
+
+        @Test
+        void 边界_软删子会话不在父会话列表中时列表保持不变() {
+            AgentContextManager.AgentSessionContext parentCtx = buildParentWithChildren();
+            when(dataProvider.loadAgentContext("99")).thenReturn(
+                    new ContextDataProvider.AgentContextData(agentId, "child prompt", "200", 10, List.of(), Map.of(), parentSessionId, null, null, null),
+                    null); // 第一次入缓存，第二次模拟软删
+            agentContextManager.get("99");
+
+            agentContextManager.remove("99");
+
+            List<AgentExecutionContext.ChildSession> children = parentCtx.context().getChildSessions();
+            assertEquals(2, children.size(), "不在列表中的子会话移除后列表保持不变");
+            assertEquals(childSessionId, children.get(0).sessionId());
+            assertEquals("3", children.get(1).sessionId());
+        }
+
+        @Test
+        void 边界_移除缓存命中的主会话不触发DB查询且正常清除缓存() {
+            AgentContextManager.AgentSessionContext parentCtxBefore = buildParentWithChildren();
+
+            agentContextManager.remove(parentSessionId);
+
+            // 主会话缓存命中且 parentSessionId 为 null：remove 不应再触发 loadAgentContext（build 时仅 1 次）
+            verify(dataProvider, times(1)).loadAgentContext(parentSessionId);
+            assertNotSame(parentCtxBefore, agentContextManager.get(parentSessionId),
+                    "主会话移除后缓存条目应被清除");
+        }
+
+        @Test
+        void 边界_缓存未命中的会话remove不触发DB查询() {
+            String neverCached = "never-cached-999";
+
+            agentContextManager.remove(neverCached);
+
+            // 缓存未命中时无法剪枝（拿不到父 ID），不应触发 loadAgentContext 查询
+            verify(dataProvider, never()).loadAgentContext(neverCached);
+        }
+    }
+
+    @Nested
     class LightweightAndLazyBuildTest {
 
         @Test

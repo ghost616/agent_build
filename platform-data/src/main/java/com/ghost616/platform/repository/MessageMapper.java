@@ -16,15 +16,15 @@ import java.util.List;
 @DS("message")
 public interface MessageMapper extends BaseMapper<Message> {
 
-    @Update("UPDATE message SET rollback=1 WHERE session_id = #{sessionId} AND sequence_num >= #{sequenceNum}")
+    @Update("UPDATE message SET rollback=1 WHERE session_id = #{sessionId} AND sequence_num >= #{sequenceNum} AND deleted = 0")
     int rollbackBySessionIdAndGeSequenceNum(Long sessionId, Integer sequenceNum);
 
-    @Select("SELECT * FROM message WHERE conversation_id = #{conversationId} AND rollback = 0 ORDER BY create_time ASC")
+    @Select("SELECT * FROM message WHERE conversation_id = #{conversationId} AND rollback = 0 AND deleted = 0 ORDER BY create_time ASC")
     List<Message> selectByConversationId(@Param("conversationId") String conversationId);
 
-    @Select("SELECT COUNT(*) FROM message WHERE session_id = #{sessionId} AND role = 'user' AND rollback = 0 AND user_input = 1")
+    @Select("SELECT COUNT(*) FROM message WHERE session_id = #{sessionId} AND role = 'user' AND rollback = 0 AND user_input = 1 AND deleted = 0")
     Long countUserMessages(@Param("sessionId") Long sessionId);
 
-    @Select("SELECT sequence_num FROM message WHERE session_id = #{sessionId} AND role = 'user' AND rollback = 0 AND user_input = 1 ORDER BY sequence_num ASC LIMIT 1 OFFSET #{n}")
+    @Select("SELECT sequence_num FROM message WHERE session_id = #{sessionId} AND role = 'user' AND rollback = 0 AND user_input = 1 AND deleted = 0 ORDER BY sequence_num ASC LIMIT 1 OFFSET #{n}")
     Integer findNthUserSequenceNum(@Param("sessionId") Long sessionId, @Param("n") int n);
 }

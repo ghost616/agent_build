@@ -135,6 +135,13 @@ AgentSessionContext 由 record 改为 class（AgentContextManager 静态嵌套�
 - AgentExecutionContext 构造器 childSessions 由拷贝（addAll）改为共享引用（childSessions != null ? childSessions : new ArrayList<>()），配合懒构建共享引用语义。
 
 Builder.build() 缓存命中时校验 modelIdOverride 一致性（Objects.equals(cached.modelIdOverride, modelIdOverride)）：一致直接返回缓存；不一致（如 get() 轻量构建写入的无 override 条目）先 cache.remove(sessionId, cached) 移除旧条目再重新构建带本次 override 的上下文，保证 ChatService.chat 请求指定的 modelId 生效，避免回退为会话默认模型；并发下 putIfAbsent 竞态返回不同 override 条目时同样替换为本次 override 的上下文。
+
+remove(String sessionId) 新增子会话同步删除逻辑：通过 dataProvider.loadAgentContext(sessionId) 获取 parentSessionId，若为子会话（parentSessionId 非空）则获取父会话缓存（cache.get(parentSessionId)），调用其 mutator().refreshChildSessions 按 ChildSession.sessionId 匹配过滤被移除的子会话（不含则不变，父会话不在缓存时静默跳过），随后移除本会话缓存并记录 CACHE_REMOVE 日志；方法开头调用 ensureInitialized() 保证 dataProvider 已初始化。
+
+remove(String sessionId) 重构为"剪枝+驱逐"职责分离（皋陶审查修复）：新增私有方法 pruneChildSessionIfDeleted(sessionId)——① parentSessionId 优先从被移除会话自身缓存条目 agentContextData() 读取（软删后 DB 查询拿不到父 ID），缓存未命中才回退 dataProvider.loadAgentContext(sessionId)；② 主会话（缓存命中且 parentSessionId 为 null）不触发 DB 查询；③ 仅当 dataProvider.loadAgentContext(sessionId) 返回 null（确认已软删，@TableLogic 过滤）才剪枝，活跃会话（如 rollback/普通驱逐）仅驱逐缓存不剪枝；④ 剪枝优先操作父会话 agentContextData().childSessions() 共享引用原地 removeIf（避免触发父上下文完整懒构建），预构建条目（agentContextData 为 null）回退 mutator().refreshChildSessions；⑤ 剪枝段 try-catch 保护，异常仅 WARN 日志记录，不影响 remove 的缓存驱逐职责。
+
+pruneChildSessionIfDeleted 缓存未命中优化（皋陶复审）：cachedParentId 仅从被移除会话自身缓存条目 agentContextData() 读取（软删后 DB 查询拿不到父 ID）；cachedParentId 为 null（主会话缓存命中或缓存未命中）时统一直接 return 不触发 DB 查询——缓存未命中时无法获取父 ID 且活跃子会话按职责分离不剪枝，原"缓存未命中回退 loadAgentContext"为死代码（查询的三种结果均 return 不剪枝），已删除；remove 对未缓存会话零额外开销。
+
 ## ToolExecutionService
 
 工具执行服务，非 Spring 组件。构造函数改为接收 (AgentComponentRegistry, ChatService)，通过 registry 延迟获取 ToolCallQueueManager/ToolManager/SystemToolManager/SessionManager/AgentContextManager/ToolExecutionTracker。提供三个核心方法：executeTool(String sessionId) 从队列获取下一个工具调用，解析调用器并异步执行；getToolStatus(String sessionId, String toolId) 查询当前工具执行状态（toolId 为必传参数）；continueAfterTools(String sessionId) 检查无工具在执行后，持久化工具结果、添加历史记录、清理队列和跟踪器，构造 TOOL_CONTINUE_MARKER 请求并调用 chatService.chat()。
@@ -187,6 +194,9 @@ buildToolResultChunk 补充 toolId：构建的 JSON delta 增加 toolId 字段�
 ## SubSessionCallback
 
 SubSessionCallback 函数式接口（com.ghost616.agentbase.service.agent.invoker），使用 @FunctionalInterface 注解，定义 execute(AgentExecutionContext ctx, String sessionId, String userMessage, Boolean thinking) 方法返回 Message，作为子会话消息处理的回调契约。ctx 为子会话执行上下文（com.ghost616.agentbase.service.agent.AgentExecutionContext），提供上下文能力（如 sendUserMessage 等），可为 null 表示不提供上下文；sessionId 为会话 ID；userMessage 为用户消息内容；thinking 表示是否启用思考模式，可为 null 表示使用默认行为。
+
+新增 default boolean exists(String childSessionId) 方法：默认返回 true（不做校验），实现方可覆写按需判断子会话是否存在；default 方法不增加抽象方法数量，@FunctionalInterface 约束保持不变。
+
 ## ErrorCode
 
 AgentErrorCode 枚举（com.ghost616.agentbase.enums.AgentErrorCode），智能体模块统一错误码，仅保留 agent-base/agent-integration 实际使用的 12 个错误码。系统错误码：SYSTEM_ERROR(SYS-001)/PARAM_INVALID(SYS-002)/NOT_FOUND(SYS-003)/DUPLICATE_KEY(SYS-005)；模型错误码：MODEL_NOT_FOUND(MODEL-CONFIG-001)/MODEL_INVOKE_ERROR(MODEL-INVOKE-001)/MODEL_VERIFY_ERROR(MODEL-VERIFY-001)；工具错误码：TOOL_INVOKE_ERROR(TOOL-INVOKE-001)/TOOL_RUNTIME_NOT_FOUND(TOOL-RUNTIME-001)/TOOL_EXECUTE_TIMEOUT(TOOL-EXEC-001)/TOOL_EXECUTE_ERROR(TOOL-EXEC-002)；会话错误码：SESSION_NOT_FOUND(SESSION-001)。原 ErrorCode 中评估/SKILL/知识库等模块错误码已随 BaseException/BusinessException 迁移至 platform-data 模块。

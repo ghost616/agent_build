@@ -23,4 +23,15 @@ public interface SubSessionCallback {
      * @return 执行结果消息
      */
     Message execute(AgentExecutionContext ctx, String sessionId, String userMessage, Boolean thinking);
+
+    /**
+     * 判断子会话是否存在。
+     * 默认返回 true（不做校验），实现方可覆写以按需判断子会话状态。
+     *
+     * @param childSessionId 子会话 ID
+     * @return 子会话是否存在，默认 true
+     */
+    default boolean exists(String childSessionId) {
+        return true;
+    }
 }

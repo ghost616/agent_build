@@ -443,12 +443,74 @@ public class AgentContextManager {
         }
     }
 
+    /**
+     * 移除会话上下文缓存条目。
+     * 若被移除的会话为子会话且已确认从数据源删除（软删后 loadAgentContext 返回 null），
+     * 会同步将其从父会话缓存的 childSessions 列表中剪除，避免陈旧子会话条目滞留；
+     * 活跃会话（如 rollback）仅驱逐缓存条目，不触发剪枝。
+     */
     public void remove(String sessionId) {
+        ensureInitialized();
+        // 子会话删除剪枝与缓存条目驱逐职责分离：仅当会话确认已从 DB 删除时才剪枝
+        pruneChildSessionIfDeleted(sessionId);
         cache.remove(sessionId);
         addLog(CacheRemoveLogData.builder()
                 .logLevel(LogLevel.INFO)
                 .sessionId(sessionId)
                 .build());
+    }
+
+    /**
+     * 子会话删除剪枝：当被移除的会话确认已从 DB 软删（loadAgentContext 返回 null）且为子会话时，
+     * 将其从父会话缓存（cache.get(parentSessionId)）的 childSessions 列表中按 ChildSession.sessionId 过滤掉。
+     * - parentSessionId 只从被移除会话自身缓存条目的 agentContextData() 读取（软删后 DB 查询拿不到父 ID）；
+     *   缓存未命中（会话从未被构建/缓存）时无法获取父 ID 且活跃子会话按职责分离不剪枝，不触发 DB 查询；
+     * - 主会话（缓存命中且 parentSessionId 为 null）不触发 DB 查询；
+     * - 会话在 DB 中仍存在（如 rollback/普通驱逐）不剪枝；
+     * - 剪枝优先操作父会话 agentContextData().childSessions() 共享引用（原地 removeIf），
+     *   避免触发父上下文完整懒构建；预构建条目（agentContextData 为 null）回退 mutator().refreshChildSessions；
+     * - 剪枝异常仅 WARN 日志记录，不影响 remove 的缓存驱逐职责。
+     */
+    private void pruneChildSessionIfDeleted(String sessionId) {
+        try {
+            AgentSessionContext cached = cache.get(sessionId);
+            String cachedParentId = null;
+            if (cached != null) {
+                if (cached.agentContextData() != null) {
+                    cachedParentId = cached.agentContextData().parentSessionId();
+                } else if (cached.context != null) {
+                    cachedParentId = cached.context.getParentSessionId();
+                }
+            }
+            if (cachedParentId == null) {
+                // 主会话（缓存命中且 parentSessionId 为 null）或缓存未命中：
+                // 均无需剪枝——缓存未命中时拿不到父 ID（软删后 DB 也查不到），活跃子会话按职责分离不剪枝，
+                // 故不触发 DB 查询，remove 对未缓存会话零额外开销
+                return;
+            }
+            // 缓存条目表明为子会话：确认会话在 DB 中是否已不存在（软删后 loadAgentContext 返回 null）
+            if (dataProvider.loadAgentContext(sessionId) != null) {
+                return; // 会话仍存在（rollback/普通驱逐）：仅驱逐缓存，不剪枝
+            }
+            AgentSessionContext parentCtx = cache.get(cachedParentId);
+            if (parentCtx == null) {
+                return; // 父会话不在缓存，无需剪枝
+            }
+            if (parentCtx.agentContextData() != null && parentCtx.agentContextData().childSessions() != null) {
+                // 轻量条目：直接原地过滤共享 childSessions 引用（agentContextData 与 context 共享），避免触发懒构建
+                parentCtx.agentContextData().childSessions()
+                        .removeIf(child -> sessionId.equals(child.sessionId()));
+            } else if (parentCtx.context != null) {
+                // 预构建条目（agentContextData 为 null，context 已构建）：走 mutator 刷新
+                List<AgentExecutionContext.ChildSession> current = parentCtx.context.getChildSessions();
+                List<AgentExecutionContext.ChildSession> updated = current.stream()
+                        .filter(child -> !sessionId.equals(child.sessionId()))
+                        .toList();
+                parentCtx.mutator().refreshChildSessions(updated);
+            }
+        } catch (Exception e) {
+            log.warn("子会话删除剪枝失败，仅驱逐缓存: sessionId={}, error={}", sessionId, e.getMessage(), e);
+        }
     }
 
     private List<AgentExecutionContext.HistoryEntry> convertMessagesToHistory(List<MessageDataProvider.MessageDTO> messages) {

@@ -1,0 +1,12 @@
+{
+  "plan_id": "plan_e37383a8-2397-4998-9ac7-896ec9e5cfe5",
+  "module_name": "agent-base",
+  "development_plan": "子会话删除功能——SubSessionCallback.exists 与 AgentContextManager 移除逻辑。任务：1) SubSessionCallback 接口加 default boolean exists(String childSessionId)（默认返回 true，保持 @FunctionalInterface）；2) AgentContextManager.remove(String sessionId) 添加逻辑：通过 dataProvider.loadAgentContext(sessionId) 获取 parentSessionId，若为子会话（parentSessionId 非空）则获取父会话缓存（cache.get(parentSessionId)），调用其 mutator().refreshChildSessions 过滤掉被移除的子会话（按 ChildSession.sessionId 匹配，不含则不变）；3) 同步更新受影响单元测试。",
+  "session_id": "42790482-6dc5-4400-a8f9-5344d433602e",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SubSessionCallback.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/SubSessionCallbackFunctionalTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/AgentContextManagerTest.java"
+  ]
+}

@@ -40,6 +40,7 @@ public class MessageSchemaMigration extends AbstractSchemaMigration implements A
                 new Migration("message", "conversation_id", "VARCHAR(50)", null),
                 new Migration("message", "rollback", "TINYINT(1)", "0"),
                 new Migration("message", "user_input", "TINYINT(1)", "1"),
+                new Migration("message", "deleted", "INTEGER", "0"),
                 new Migration("agent_log", "session_variables", "TEXT", null),
                 new Migration("agent_log", "conversation_variables", "TEXT", null),
                 new Migration("message_tool_call", "type", "VARCHAR(32)", "'function'"),

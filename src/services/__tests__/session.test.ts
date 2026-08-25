@@ -2,16 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockPost = vi.hoisted(() => vi.fn());
 const mockGet = vi.hoisted(() => vi.fn());
+const mockDelete = vi.hoisted(() => vi.fn());
 const mockFetch = vi.hoisted(() => vi.fn());
 
 vi.mock('../api', () => ({
   default: {
     post: mockPost,
     get: mockGet,
+    delete: mockDelete,
   },
 }));
 
-import { stopChat, listChildSessions, getSubSessionData, completeSubSession, getBrowserExtension, getToolScript, fetchConversationId, getConversationMessages, getSessionMessagesRange, getSessionMessages } from '../session';
+import { stopChat, deleteSession, listChildSessions, getSubSessionData, completeSubSession, getBrowserExtension, getToolScript, fetchConversationId, getConversationMessages, getSessionMessagesRange, getSessionMessages } from '../session';
 
 describe('fetchConversationId', () => {
   beforeEach(() => {
@@ -253,6 +255,34 @@ describe('listChildSessions', () => {
     const testError = new Error('Network Error');
     mockGet.mockRejectedValueOnce(testError);
     await expect(listChildSessions('parent-123')).rejects.toThrow('Network Error');
+  });
+});
+
+describe('deleteSession', () => {
+  beforeEach(() => {
+    mockDelete.mockReset();
+  });
+
+  it('应调用 DELETE /sessions/{id} 并返回 Promise<void>', async () => {
+    mockDelete.mockResolvedValueOnce(undefined);
+    await deleteSession('session-123');
+    expect(mockDelete).toHaveBeenCalledWith('/sessions/session-123');
+  });
+
+  it('应在不同 id 下正确拼接 URL', async () => {
+    mockDelete.mockResolvedValueOnce(undefined);
+    await deleteSession('session-a');
+    expect(mockDelete).toHaveBeenCalledWith('/sessions/session-a');
+
+    mockDelete.mockResolvedValueOnce(undefined);
+    await deleteSession('session-b');
+    expect(mockDelete).toHaveBeenCalledWith('/sessions/session-b');
+  });
+
+  it('应在 API 失败时抛出错误', async () => {
+    const testError = new Error('Network Error');
+    mockDelete.mockRejectedValueOnce(testError);
+    await expect(deleteSession('test-session')).rejects.toThrow('Network Error');
   });
 });
 

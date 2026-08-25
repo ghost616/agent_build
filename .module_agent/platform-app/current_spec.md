@@ -152,6 +152,9 @@ platform-app 模块包含以下功能：
 - ConversationController GET /api/conversations/{conversationId}/messages 返回 ApiResponse<List<SessionMessageDTO>>
 - 同步更新测试：SessionControllerTest/ConversationControllerTest/SessionServiceImplTest 改用 SessionMessageDTO 与 toSessionMessageDTOs mock；DefaultMessageDataProviderTest 新增 toSessionMessageDTOs 3 个映射用例（全字段含 sequenceNum/空列表/单条保留 sequenceNum）；EvaluationResultGenerateServiceTest/EvaluationExecutionServiceTest/EvaluationSessionControllerTest/DefaultContextDataProviderTest 适配内部 MessageDTO 去除 sequenceNum 后的 14 字段构造
 - 环境备注：新文件 SessionMessageDTO.java 因 E: 卷不支持硬链接（str_replace_editor create 的 fs.link 原子发布失败，EISDIR）无法由代理工具创建，需人工创建（内容见测试报告附录）
+- SessionServiceImpl.deleteSession 扩展为级联假删（不递归删除子孙会话）：会话（@TableLogic deleteById → UPDATE session SET deleted=1）、消息（messageMapper.delete 按 session_id 假删，@TableLogic → UPDATE message SET deleted=1）、session_tool/session_variable/session_skill 关联（@TableLogic delete 自动软删）五类数据统一软删（deleted=1，物理数据保留）；保留 agentContextManager.remove 与 toolManager.clearSessionCache 缓存清理；方法不再声明 @Transactional（与 rollback 拆分事务策略一致：消息假删经 @DS("message") 路由 message 数据源，主库事务内 @DS 路由失效），SessionServiceImpl 新增注入 SessionVariableMapper/SessionSkillMapper
+- DefaultSubSessionCallback 新增覆写 SubSessionCallback.exists(String childSessionId)：IdConverter.parse 后 sessionMapper.selectById 非 null 返回 true（Session @TableLogic 自动排除已软删会话，软删子会话被判定为不存在），null/空白/无效格式 ID 返回 false 且不查库；供 SubSessionCallbackTool（callback_sub_session 工具）按 sessionName 复用子会话时校验会话有效性
+- DefaultToolDataProvider 核对确认（agent-integration 力牧已实现）：注入 AgentContextManager，getCustomInvoker 命中 callback_sub_session 时以三参构造 new SubSessionCallbackTool(toolConfig, defaultSubSessionCallback, agentContextManager)
 ## 知识库管理
 
 - 知识库(KnowledgeBase) CRUD 接口：DTO（KnowledgeBaseDTO/KnowledgeBaseCreateRequest/KnowledgeBaseUpdateRequest）、Service（KnowledgeBaseService 接口与 KnowledgeBaseServiceImpl 实现）、Controller（KnowledgeBaseController，路径 /api/knowledge-bases）

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Button, Dropdown, Input, message, Select, Spin, Switch, Tabs, Typography } from 'antd';
+import { Button, Dropdown, Input, message, Modal, Select, Spin, Switch, Tabs, Typography } from 'antd';
 import type { TabsProps } from 'antd';
 import {
   UserOutlined,
@@ -12,11 +12,13 @@ import {
   ArrowLeftOutlined,
   DownOutlined,
   UpOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import {
   agentChatStream,
   completeSubSession,
   continueChatStream,
+  deleteSession,
   executeTools,
   fetchConversationId,
   getSession,
@@ -1621,6 +1623,62 @@ function AgentChat(): JSX.Element {
     return list?.find((c) => c.id === sid)?.title || sid;
   };
 
+  /**
+   * 删除子会话（路径标签上的删除图标触发）：
+   * 先弹 Modal.confirm 确认（删除后消息不可恢复），确认后调用 deleteSession 删除；
+   * 成功后——若删除的是路径中的子会话（含当前激活末位）则截断路径切回其父会话标签；
+   * 从父会话子列表缓存移除该子会话并清理其自身子列表缓存、清理对应 childStreams 流式状态；
+   * 删除失败提示错误信息。
+   * @param childId 要删除的子会话 ID
+   * @param parentId 直接父会话 ID（用于从父会话子列表缓存移除）
+   */
+  const handleDeleteChild = useCallback((childId: string, parentId: string): void => {
+    const label =
+      childListCacheRef.current[parentId]?.find((c) => c.id === childId)?.title || childId;
+    Modal.confirm({
+      title: '删除子会话',
+      content: `确定要删除子会话「${label}」吗？删除后该子会话的消息将不可恢复。`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async (): Promise<void> => {
+        try {
+          await deleteSession(childId);
+          message.success('删除子会话成功');
+          // 若删除的是路径中的子会话（含当前激活末位），截断路径至其父会话标签并移除其后代层级
+          // （主会话 idx=0 不处理，删除图标仅出现在 i>0 的子会话标签上）
+          setActivePath((prev) => {
+            const idx = prev.indexOf(childId);
+            return idx > 0 ? prev.slice(0, idx) : prev;
+          });
+          // 从父会话子列表缓存移除该子会话，并清理其自身子列表缓存
+          setChildListCache((prev) => {
+            const parentList = prev[parentId];
+            const next = { ...prev };
+            if (parentList) next[parentId] = parentList.filter((c) => c.id !== childId);
+            delete next[childId];
+            return next;
+          });
+          const cache = { ...childListCacheRef.current };
+          if (cache[parentId]) cache[parentId] = cache[parentId].filter((c) => c.id !== childId);
+          delete cache[childId];
+          childListCacheRef.current = cache;
+          // 清理对应子会话的流式展示状态（如有）
+          setChildStreams((prev) => {
+            if (!(childId in prev)) return prev;
+            const next = { ...prev };
+            delete next[childId];
+            return next;
+          });
+          // 若删除的是当前展开下拉面板的父会话，收起下拉
+          setExpandedPickerFor((prev) => (prev === childId ? null : prev));
+        } catch {
+          message.error('删除子会话失败');
+        }
+      },
+    });
+  }, []);
+
   /** 路径标签项：主会话 + 各级激活子会话（末位为当前激活视图，内容区沿用 ChildSessionView）；
    *  仅路径末位层级标签后紧跟其下一级计数标签项（Dropdown+数量+上下箭头，无子会话时不插入，
    *  选中子会话后父层级计数标签隐藏，点击仅展开下拉不切换内容区，key 为 `${sid}-count`）。 */
@@ -1629,7 +1687,22 @@ function AgentChat(): JSX.Element {
     const items: NonNullable<TabsProps['items']> = [
       {
         key: sid,
-        label: i === 0 ? '主会话' : sessionLabel(sid, activePath[i - 1]),
+        label:
+          i === 0 ? (
+            '主会话'
+          ) : (
+            <span className="agent-chat-tab-label">
+              {sessionLabel(sid, activePath[i - 1])}
+              <DeleteOutlined
+                className="agent-chat-tab-delete"
+                onClick={(e) => {
+                  // 阻止冒泡：点击删除图标不触发标签切换
+                  e.stopPropagation();
+                  handleDeleteChild(sid, activePath[i - 1]);
+                }}
+              />
+            </span>
+          ),
         children:
           i === 0 ? (
             renderMainChat()
@@ -1734,6 +1807,20 @@ function AgentChat(): JSX.Element {
         }
         .agent-chat-count-tab:hover {
           color: #569cd6;
+        }
+        .agent-chat-tab-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .agent-chat-tab-delete {
+          font-size: 12px;
+          color: #8c8c8c;
+          cursor: pointer;
+          transition: color 0.2s;
+        }
+        .agent-chat-tab-delete:hover {
+          color: #ff4d4f;
         }
         /* 统一标签间距：主会话标签、子会话名称标签、计数标签之间统一 12px（覆盖 antd 默认 tab 间距 32px），选中前后位置一致 */
         .agent-chat-tabs .ant-tabs-tab + .ant-tabs-tab {

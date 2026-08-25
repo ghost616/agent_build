@@ -6,6 +6,7 @@ import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.skill.SkillConfigDTO;
 import com.ghost616.agentbase.dto.tool.ToolConfigDTO;
 import com.ghost616.agentbase.enums.ToolType;
+import com.ghost616.agentbase.service.agent.AgentContextManager;
 import com.ghost616.agentbase.service.agent.AgentExecutionContext;
 import com.ghost616.agentbase.service.agent.invoker.CustomToolInvoker;
 import com.ghost616.agentbase.service.agent.invoker.SubSessionCallback;
@@ -22,10 +23,13 @@ public class SubSessionCallbackTool extends CustomToolInvoker {
     public static final String TOOL_NAME = "callback_sub_session";
 
     private final SubSessionCallback callback;
+    private final AgentContextManager agentContextManager;
 
-    public SubSessionCallbackTool(ToolConfigDTO toolConfig, SubSessionCallback callback) {
+    public SubSessionCallbackTool(ToolConfigDTO toolConfig, SubSessionCallback callback,
+                                  AgentContextManager agentContextManager) {
         super(toolConfig);
         this.callback = callback;
+        this.agentContextManager = agentContextManager;
     }
 
     public static ToolConfigDTO createToolConfig() {
@@ -84,16 +88,31 @@ public class SubSessionCallbackTool extends CustomToolInvoker {
         }
     }
 
+    /**
+     * 按 sessionName 查找可复用的子会话：遍历父上下文中的子会话列表，命中同名会话后调用
+     * callback.exists(childSessionId) 校验其有效性；已失效（不存在）的会话通过
+     * agentContextManager.remove(childSessionId) 清理上下文缓存并继续查找其他匹配会话，
+     * 全部匹配会话均无效时返回 null（由调用方触发重新创建子会话）。
+     * 遍历基于防御性拷贝：getChildSessions() 返回的 unmodifiableList 视图底层与父会话缓存共享
+     * 同一 ArrayList，remove 触发的父剪枝（refreshChildSessions 对共享列表 clear+addAll）会令
+     * 对原视图的迭代抛出 ConcurrentModificationException，故先拷贝再遍历。
+     */
     private String findExistingChildSessionId(AgentExecutionContext ctx, String sessionName) {
         List<AgentExecutionContext.ChildSession> childSessions = ctx.getChildSessions();
         if (childSessions == null || childSessions.isEmpty()) {
             return null;
         }
-        return childSessions.stream()
-                .filter(child -> sessionName.equals(child.sessionName()))
-                .map(AgentExecutionContext.ChildSession::sessionId)
-                .findFirst()
-                .orElse(null);
+        for (AgentExecutionContext.ChildSession child : new ArrayList<>(childSessions)) {
+            if (sessionName.equals(child.sessionName())) {
+                String childSessionId = child.sessionId();
+                if (callback.exists(childSessionId)) {
+                    return childSessionId;
+                }
+                // 缓存中的子会话已失效，清理缓存后继续查找其他匹配会话
+                agentContextManager.remove(childSessionId);
+            }
+        }
+        return null;
     }
 
     private List<String> resolveToolIds(AgentExecutionContext ctx, JsonNode toolNamesNode) {

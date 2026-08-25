@@ -5,11 +5,15 @@ import com.ghost616.platform.dto.session.SessionDTO;
 import com.ghost616.platform.entity.AgentTool;
 import com.ghost616.platform.entity.Message;
 import com.ghost616.platform.entity.Session;
+import com.ghost616.platform.entity.SessionSkill;
 import com.ghost616.platform.entity.SessionTool;
+import com.ghost616.platform.entity.SessionVariable;
 import com.ghost616.platform.repository.AgentToolMapper;
 import com.ghost616.platform.repository.MessageMapper;
 import com.ghost616.platform.repository.SessionMapper;
+import com.ghost616.platform.repository.SessionSkillMapper;
 import com.ghost616.platform.repository.SessionToolMapper;
+import com.ghost616.platform.repository.SessionVariableMapper;
 import com.ghost616.platform.service.agent.DefaultMessageDataProvider;
 import com.ghost616.platform.service.message.MessageService;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +45,8 @@ public class SessionServiceImpl implements SessionService {
     private final MessageMapper messageMapper;
     private final DefaultMessageDataProvider defaultMessageDataProvider;
     private final MessageService messageService;
+    private final SessionVariableMapper sessionVariableMapper;
+    private final SessionSkillMapper sessionSkillMapper;
 
     @Override
     public List<SessionDTO> listSessions(Long agentId) {
@@ -105,18 +111,41 @@ public class SessionServiceImpl implements SessionService {
         return toDTO(entity);
     }
 
+    /**
+     * 删除会话（级联假删）：会话、消息、会话工具/变量/技能关联均通过 @TableLogic
+     * 软删（deleted=1，物理数据保留），不递归删除子孙会话；保留上下文与工具缓存清理。
+     *
+     * <p>不声明 @Transactional：消息假删经 {@code @DS("message")} 路由到 message 数据源，
+     * 在主库事务内 @DS 路由会失效（与 rollback 拆分事务策略一致），故各数据源操作自行提交。</p>
+     */
     @Override
-    @Transactional
     public void deleteSession(Long id) {
         Session entity = sessionMapper.selectById(id);
         if (entity == null) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
 
-        LambdaQueryWrapper<SessionTool> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(SessionTool::getSessionId, id);
-        sessionToolMapper.delete(deleteWrapper);
+        // 会话工具关联假删（@TableLogic delete → UPDATE session_tool SET deleted=1）
+        LambdaQueryWrapper<SessionTool> toolWrapper = new LambdaQueryWrapper<>();
+        toolWrapper.eq(SessionTool::getSessionId, id);
+        sessionToolMapper.delete(toolWrapper);
 
+        // 会话变量假删
+        LambdaQueryWrapper<SessionVariable> variableWrapper = new LambdaQueryWrapper<>();
+        variableWrapper.eq(SessionVariable::getSessionId, id);
+        sessionVariableMapper.delete(variableWrapper);
+
+        // 会话技能关联假删
+        LambdaQueryWrapper<SessionSkill> skillWrapper = new LambdaQueryWrapper<>();
+        skillWrapper.eq(SessionSkill::getSessionId, id);
+        sessionSkillMapper.delete(skillWrapper);
+
+        // 消息假删（message 数据源，@TableLogic delete → UPDATE message SET deleted=1）
+        LambdaQueryWrapper<Message> messageWrapper = new LambdaQueryWrapper<>();
+        messageWrapper.eq(Message::getSessionId, id);
+        messageMapper.delete(messageWrapper);
+
+        // 会话假删（@TableLogic deleteById → UPDATE session SET deleted=1）
         sessionMapper.deleteById(id);
         agentContextManager.remove(IdConverter.toString(id));
         toolManager.clearSessionCache(IdConverter.toString(id));

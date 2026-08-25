@@ -4,6 +4,7 @@ import com.ghost616.agentbase.dto.tool.ToolConfigDTO;
 import com.ghost616.agentbase.enums.RequestType;
 import com.ghost616.agentbase.enums.SessionAuthType;
 import com.ghost616.agentbase.enums.ToolType;
+import com.ghost616.agentbase.service.agent.AgentContextManager;
 import com.ghost616.agentbase.service.agent.invoker.CustomToolInvoker;
 import com.ghost616.agentbase.service.agent.ToolDataProvider.SessionToolInfo;
 import com.ghost616.agentinteg.history.HistoryMessageQueryProvider;
@@ -75,6 +76,8 @@ class DefaultToolDataProviderTest {
     @Mock private ObjectProvider<HistoryMessageQueryProvider> historyMessageQueryProviderProvider;
     @Mock private DefaultSubSessionCallback defaultSubSessionCallback;
     @Mock private SubSessionWebSocketModeResolver subSessionWebSocketModeResolver;
+    @Mock private AgentContextManager agentContextManager;
+    @Mock private ObjectProvider<AgentContextManager> agentContextManagerProvider;
 
     private DefaultToolDataProvider provider;
 
@@ -84,7 +87,8 @@ class DefaultToolDataProviderTest {
                 agentSkillMapper, skillToolMapper, sessionSkillMapper, toolConfigService,
                 browserToolCallback, modelConfigMapper, knowledgeBaseQueryProviderProvider,
                 agentKnowledgeBaseMapper, agentConfigMapper, memoryQueryProviderProvider,
-                historyMessageQueryProviderProvider, defaultSubSessionCallback, subSessionWebSocketModeResolver);
+                historyMessageQueryProviderProvider, defaultSubSessionCallback,
+                subSessionWebSocketModeResolver, agentContextManagerProvider);
     }
 
     private SessionTool createSessionTool(Long toolId, SessionAuthType auth) {
@@ -571,11 +575,25 @@ class DefaultToolDataProviderTest {
                     .name(SubSessionCallbackTool.TOOL_NAME)
                     .toolType(ToolType.CUSTOM)
                     .build();
+            when(agentContextManagerProvider.getObject()).thenReturn(agentContextManager);
 
             CustomToolInvoker result = provider.getCustomInvoker(config);
 
             assertInstanceOf(SubSessionCallbackTool.class, result);
+            verify(agentContextManagerProvider).getObject();
             verify(toolConfigService, never()).getById(anyLong());
+        }
+
+        @Test
+        @DisplayName("AgentContextManager 通过 ObjectProvider 注入，避免构造器循环依赖")
+        void agentContextManager_shouldBeInjectedViaObjectProvider() throws Exception {
+            // AgentContextManager → AgentAssembler → toolDataProvider 环为构造器注入环，
+            // 直接字段注入会在 Spring Boot 3.2（allow-circular-references=false）启动时抛
+            // BeanCurrentlyInCreationException；ObjectProvider 注入不实例化目标 Bean，按需获取打破环
+            java.lang.reflect.Field field = DefaultToolDataProvider.class.getDeclaredField("agentContextManagerProvider");
+            field.setAccessible(true);
+            assertTrue(ObjectProvider.class.isAssignableFrom(field.getType()),
+                    "agentContextManagerProvider 字段必须是 ObjectProvider 类型以解除构造器循环依赖");
         }
 
         @Test

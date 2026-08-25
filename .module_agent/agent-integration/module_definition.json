@@ -202,12 +202,12 @@
       "description": "HistoryQueryTool 单元测试，覆盖 createToolConfig（CUSTOM 类型、工具名、参数 schema）、execute 正常路径（seqs/includeReasoning 透传、reasoning 按需返回、toolCalls/toolResult 序列化）、includeReasoning 默认 false 不返回 reasoning、无匹配消息返回空列表、provider 返回 null 返回空列表、缺少/空/含非整数 seqs 的错误场景、无法获取会话 ID、provider 异常场景。"
     },
     {
-      "description": "自定义工具调用器（继承 CustomToolInvoker，非 SystemTool），工具名 callback_sub_session。构造函数注入 ToolConfigDTO 与 SubSessionCallback 回调，提供静态 createToolConfig() 生成 ToolConfigDTO（toolType=CUSTOM、id=null、name=callback_sub_session，描述与参数 schema 内置于 DTO，id 由注册方设置为工具名）；execute() 解析 JSON 参数后先按 sessionName 精确匹配 ctx.getChildSessions() 复用已存在子会话（命中时忽略 description/toolNames/skillNames 直接回调发送消息），未命中时按 toolNames/skillNames 从上下文匹配获取 toolIds/skillIds 调用 createChildSession 创建子会话，通过注入的 callback.execute() 执行用户消息并返回消息内容；支持 thinking 参数透传给回调；异常时返回 {\"status\":\"error\",\"errMsg\":...} JSON。",
-      "path": "src/main/java/com/ghost616/agentinteg/tool/SubSessionCallbackTool.java"
+      "path": "src/main/java/com/ghost616/agentinteg/tool/SubSessionCallbackTool.java",
+      "description": "自定义工具调用器（继承 CustomToolInvoker，非 SystemTool），工具名 callback_sub_session。构造函数注入 ToolConfigDTO、SubSessionCallback 回调与 AgentContextManager（三参构造），提供静态 createToolConfig() 生成 ToolConfigDTO（toolType=CUSTOM、id=null、name=callback_sub_session，描述与参数 schema 内置于 DTO，id 由注册方设置为工具名）；execute() 解析 JSON 参数后先按 sessionName 精确匹配 ctx.getChildSessions() 复用已存在子会话——命中后调用 callback.exists(childSessionId) 校验有效性，存在则复用（忽略 description/toolNames/skillNames 直接回调发送消息），不存在（子会话已删除）则调用 agentContextManager.remove(childSessionId) 清理失效上下文缓存并继续查找其他匹配会话，全部匹配会话均无效时返回 null 走新建逻辑；未命中时按 toolNames/skillNames 从上下文匹配获取 toolIds/skillIds 调用 createChildSession 创建子会话，通过注入的 callback.execute() 执行用户消息并返回消息内容；支持 thinking 参数透传给回调；异常时返回 {\"status\":\"error\",\"errMsg\":...} JSON。"
     },
     {
-      "description": "SubSessionCallbackTool 单元测试：覆盖 createToolConfig 元数据（CUSTOM 类型/工具名 callback_sub_session/描述与参数 schema 含 thinking 字段）与 execute 全部分支（正常创建子会话、thinking true/false/null 传递、toolNames/skillNames 为 null 或空数组、description 为 null、JSON 解析异常、回调抛异常、toolNames 匹配/部分匹配过滤、会话名已存在复用/不存在新建/其他名称不复用）。",
-      "path": "src/test/java/com/ghost616/agentinteg/tool/SubSessionCallbackToolTest.java"
+      "path": "src/test/java/com/ghost616/agentinteg/tool/SubSessionCallbackToolTest.java",
+      "description": "SubSessionCallbackTool 单元测试：覆盖 createToolConfig 元数据（CUSTOM 类型/工具名 callback_sub_session/描述与参数 schema 含 thinking 字段）与 execute 全部分支（正常创建子会话、thinking true/false/null 传递、toolNames/skillNames 为 null 或空数组、description 为 null、JSON 解析异常、回调抛异常、toolNames 匹配/部分匹配过滤、会话名已存在复用/不存在新建/其他名称不复用、命中同名会话但已失效清理缓存并新建、同名会话多个首个失效第二个有效复用第二个、全部同名会话失效清理后新建）。"
     },
     {
       "path": "src/main/java/com/ghost616/agentinteg/tool/SendResultToParentTool.java",

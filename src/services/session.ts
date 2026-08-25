@@ -40,6 +40,10 @@ export async function getSessionContextBasic(sessionId: string): Promise<Session
   return res.data.data;
 }
 
+/**
+ * 删除会话（主会话与子会话删除共用，子会话标签删除交互复用此接口）。
+ * @param id 会话 ID
+ */
 export async function deleteSession(id: string): Promise<void> {
   await api.delete(`/sessions/${id}`);
 }

@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS session_tool (
     id           BIGINT PRIMARY KEY,
     session_id   BIGINT,
     tool_id      BIGINT,
-    session_auth INT DEFAULT 0
+    session_auth INT DEFAULT 0,
+    deleted      INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_session_tool_session_id ON session_tool(session_id);
 CREATE INDEX IF NOT EXISTS idx_session_tool_tool_id ON session_tool(tool_id);
@@ -154,7 +155,8 @@ CREATE TABLE IF NOT EXISTS session_skill (
     id           BIGINT PRIMARY KEY,
     session_id   BIGINT,
     skill_id     BIGINT,
-    session_auth INT DEFAULT 0
+    session_auth INT DEFAULT 0,
+    deleted      INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_session_skill_session_id ON session_skill(session_id);
 CREATE INDEX IF NOT EXISTS idx_session_skill_skill_id ON session_skill(skill_id);

@@ -1,11 +1,16 @@
 package com.ghost616.agentinteg.tool;
 
+import com.ghost616.agentbase.core.AgentComponentRegistry;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.skill.SkillConfigDTO;
 import com.ghost616.agentbase.dto.tool.ToolConfigDTO;
 import com.ghost616.agentbase.enums.ToolType;
+import com.ghost616.agentbase.service.agent.AgentContextManager;
 import com.ghost616.agentbase.service.agent.AgentExecutionContext;
+import com.ghost616.agentbase.service.agent.ContextDataProvider;
+import com.ghost616.agentbase.service.agent.SessionManager;
 import com.ghost616.agentbase.service.agent.invoker.SubSessionCallback;
+import com.ghost616.agentbase.service.agent.invoker.ToolManager;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,7 +18,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -26,13 +34,16 @@ class SubSessionCallbackToolTest {
     private SubSessionCallback callback;
 
     @Mock
+    private AgentContextManager agentContextManager;
+
+    @Mock
     private AgentExecutionContext ctx;
 
     private SubSessionCallbackTool tool;
 
     @BeforeEach
     void setUp() {
-        tool = new SubSessionCallbackTool(SubSessionCallbackTool.createToolConfig(), callback);
+        tool = new SubSessionCallbackTool(SubSessionCallbackTool.createToolConfig(), callback, agentContextManager);
     }
 
     @Test
@@ -364,6 +375,7 @@ class SubSessionCallbackToolTest {
         AgentExecutionContext.ChildSession existing =
                 new AgentExecutionContext.ChildSession("999", "test-session", "旧描述", "100");
         when(ctx.getChildSessions()).thenReturn(List.of(existing));
+        when(callback.exists("999")).thenReturn(true);
 
         Message resultMessage = Message.builder().content("复用成功").build();
         when(callback.execute(eq(ctx), eq("999"), eq("hello"), isNull())).thenReturn(resultMessage);
@@ -390,6 +402,7 @@ class SubSessionCallbackToolTest {
         AgentExecutionContext.ChildSession existing =
                 new AgentExecutionContext.ChildSession("123", "test-session", "已有描述", "100");
         when(ctx.getChildSessions()).thenReturn(List.of(existing));
+        when(callback.exists("123")).thenReturn(true);
 
         Message resultMessage = Message.builder().content("ok").build();
         when(callback.execute(eq(ctx), eq("123"), eq("hello"), isNull())).thenReturn(resultMessage);
@@ -453,5 +466,255 @@ class SubSessionCallbackToolTest {
 
         verify(ctx).createChildSession("target-session", null, "100", null, null, null);
         verify(callback).execute(ctx, "444", "hello", null);
+    }
+
+    @Test
+    void execute_命中同名会话但已失效_清理缓存并新建子会话() throws Exception {
+        String arguments = """
+                {
+                    "sessionName": "test-session",
+                    "userMessage": "hello"
+                }
+                """;
+
+        AgentExecutionContext.ChildSession stale =
+                new AgentExecutionContext.ChildSession("999", "test-session", "旧描述", "100");
+        when(ctx.getChildSessions()).thenReturn(List.of(stale));
+        when(callback.exists("999")).thenReturn(false);
+
+        when(ctx.getModelId()).thenReturn("100");
+        when(ctx.createChildSession(eq("test-session"), isNull(), eq("100"),
+                isNull(), isNull(), isNull()))
+                .thenReturn("888");
+
+        Message resultMessage = Message.builder().content("新建成功").build();
+        when(callback.execute(eq(ctx), eq("888"), eq("hello"), isNull())).thenReturn(resultMessage);
+
+        String result = tool.execute(ctx, arguments);
+
+        assertEquals("新建成功", result);
+        verify(agentContextManager).remove("999");
+        verify(ctx).createChildSession("test-session", null, "100", null, null, null);
+        verify(callback).execute(ctx, "888", "hello", null);
+    }
+
+    @Test
+    void execute_同名会话多个_首个失效第二个有效_复用第二个() throws Exception {
+        String arguments = """
+                {
+                    "sessionName": "test-session",
+                    "userMessage": "hello"
+                }
+                """;
+
+        AgentExecutionContext.ChildSession stale =
+                new AgentExecutionContext.ChildSession("999", "test-session", "旧描述", "100");
+        AgentExecutionContext.ChildSession valid =
+                new AgentExecutionContext.ChildSession("888", "test-session", "新描述", "100");
+        when(ctx.getChildSessions()).thenReturn(List.of(stale, valid));
+        when(callback.exists("999")).thenReturn(false);
+        when(callback.exists("888")).thenReturn(true);
+
+        Message resultMessage = Message.builder().content("复用成功").build();
+        when(callback.execute(eq(ctx), eq("888"), eq("hello"), isNull())).thenReturn(resultMessage);
+
+        String result = tool.execute(ctx, arguments);
+
+        assertEquals("复用成功", result);
+        verify(agentContextManager).remove("999");
+        verify(ctx, never()).createChildSession(anyString(), any(), anyString(), any(), any(), any());
+        verify(callback).execute(ctx, "888", "hello", null);
+    }
+
+    @Test
+    void execute_全部同名会话失效_清理后新建子会话() throws Exception {
+        String arguments = """
+                {
+                    "sessionName": "test-session",
+                    "userMessage": "hello"
+                }
+                """;
+
+        AgentExecutionContext.ChildSession stale1 =
+                new AgentExecutionContext.ChildSession("999", "test-session", "旧描述", "100");
+        AgentExecutionContext.ChildSession stale2 =
+                new AgentExecutionContext.ChildSession("888", "test-session", "更旧描述", "100");
+        when(ctx.getChildSessions()).thenReturn(List.of(stale1, stale2));
+        when(callback.exists("999")).thenReturn(false);
+        when(callback.exists("888")).thenReturn(false);
+
+        when(ctx.getModelId()).thenReturn("100");
+        when(ctx.createChildSession(eq("test-session"), isNull(), eq("100"),
+                isNull(), isNull(), isNull()))
+                .thenReturn("777");
+
+        Message resultMessage = Message.builder().content("新建成功").build();
+        when(callback.execute(eq(ctx), eq("777"), eq("hello"), isNull())).thenReturn(resultMessage);
+
+        String result = tool.execute(ctx, arguments);
+
+        assertEquals("新建成功", result);
+        verify(agentContextManager).remove("999");
+        verify(agentContextManager).remove("888");
+        verify(ctx).createChildSession("test-session", null, "100", null, null, null);
+        verify(callback).execute(ctx, "777", "hello", null);
+    }
+
+    @Test
+    void execute_remove触发共享列表变更_防御性拷贝不抛并发修改异常() throws Exception {
+        String arguments = """
+                {
+                    "sessionName": "test-session",
+                    "userMessage": "hello"
+                }
+                """;
+
+        // 模拟 getChildSessions() 的 unmodifiableList 视图：底层与父会话缓存共享同一可变 ArrayList
+        List<AgentExecutionContext.ChildSession> shared = new ArrayList<>(List.of(
+                new AgentExecutionContext.ChildSession("999", "test-session", "旧描述", "100"),
+                new AgentExecutionContext.ChildSession("888", "test-session", "更旧描述", "100")));
+        when(ctx.getChildSessions()).thenReturn(Collections.unmodifiableList(shared));
+        when(callback.exists(anyString())).thenReturn(false);
+        // 模拟 AgentContextManager.remove 的父剪枝：refreshChildSessions 对共享列表执行 clear（+addAll）
+        doAnswer(inv -> {
+            shared.clear();
+            return null;
+        }).when(agentContextManager).remove(anyString());
+
+        when(ctx.getModelId()).thenReturn("100");
+        when(ctx.createChildSession(eq("test-session"), isNull(), eq("100"),
+                isNull(), isNull(), isNull()))
+                .thenReturn("777");
+
+        Message resultMessage = Message.builder().content("新建成功").build();
+        when(callback.execute(eq(ctx), eq("777"), eq("hello"), isNull())).thenReturn(resultMessage);
+
+        String result = tool.execute(ctx, arguments);
+
+        assertEquals("新建成功", result);
+        verify(agentContextManager).remove("999");
+        verify(agentContextManager).remove("888");
+        verify(ctx).createChildSession("test-session", null, "100", null, null, null);
+    }
+
+    /**
+     * 跨层集成：真实 AgentContextManager 剪枝（pruneChildSessionIfDeleted 对父会话
+     * agentContextData().childSessions() 共享列表原地 removeIf）与工具侧防御性拷贝
+     * （new ArrayList<>(ctx.getChildSessions())）组合——[失效X, 有效Y] 同名字会话场景：
+     * X 在遍历中被 remove 触发剪枝修改底层共享列表，快照迭代不受影响继续到 Y 并复用，
+     * 不重复创建、不抛 ConcurrentModificationException。
+     */
+    @Test
+    void 集成_真实剪枝与拷贝遍历_失效X有效Y同名字会话复用第二个不重复创建() throws Exception {
+        // 真实 AgentContextManager + 真实父上下文（getChildSessions 与 agentContextData 共享同一 ArrayList）
+        ContextDataProvider dataProvider = mock(ContextDataProvider.class);
+        SessionManager sessionManager = mock(SessionManager.class);
+        ToolManager toolManager = mock(ToolManager.class);
+        AgentComponentRegistry registry = new AgentComponentRegistry();
+        registry.setContextDataProvider(dataProvider);
+        registry.setSessionManager(sessionManager);
+        registry.setToolManager(toolManager);
+        AgentContextManager realManager = new AgentContextManager(registry);
+
+        String parentId = "1";
+        AgentExecutionContext.ChildSession stale = new AgentExecutionContext.ChildSession("999", "test-session", "旧描述", "100");
+        AgentExecutionContext.ChildSession valid = new AgentExecutionContext.ChildSession("888", "test-session", "新描述", "100");
+        when(dataProvider.loadAgentContext(parentId)).thenReturn(
+                new ContextDataProvider.AgentContextData("100", "parent", "200", 10, List.of(), Map.of(), null,
+                        new ArrayList<>(List.of(stale, valid)), null, null));
+        when(sessionManager.getMessages(parentId)).thenReturn(List.of());
+        when(toolManager.getSessionTools(eq(parentId), anyBoolean())).thenReturn(List.of());
+        AgentExecutionContext parentCtx = realManager.build(parentId).build().context();
+
+        // 子会话 X 入缓存；随后模拟软删（@TableLogic）：第二次调用返回 null
+        when(dataProvider.loadAgentContext("999")).thenReturn(
+                new ContextDataProvider.AgentContextData("100", "child", "200", 10, List.of(), Map.of(), parentId, null, null, null),
+                null);
+        realManager.get("999");
+
+        // 真实工具（真实 manager + mock callback）
+        when(callback.exists("999")).thenReturn(false);
+        when(callback.exists("888")).thenReturn(true);
+        Message resultMessage = Message.builder().content("复用成功").build();
+        when(callback.execute(eq(parentCtx), eq("888"), eq("hello"), isNull())).thenReturn(resultMessage);
+        SubSessionCallbackTool realTool = new SubSessionCallbackTool(
+                SubSessionCallbackTool.createToolConfig(), callback, realManager);
+
+        String arguments = """
+                {
+                    "sessionName": "test-session",
+                    "userMessage": "hello"
+                }
+                """;
+
+        String result = realTool.execute(parentCtx, arguments);
+
+        assertEquals("复用成功", result);
+        // 复用第二个有效会话，未重复创建（若走新建分支 childSessionId 为 null，不会收到 "888"）
+        verify(callback, times(1)).execute(parentCtx, "888", "hello", null);
+        // 剪枝已生效：父会话缓存 agentContextData 与 context 视图同步只剩有效会话
+        assertEquals(1, realManager.get(parentId).agentContextData().childSessions().size());
+        assertEquals("888", realManager.get(parentId).agentContextData().childSessions().get(0).sessionId());
+        assertEquals(1, parentCtx.getChildSessions().size());
+        assertEquals("888", parentCtx.getChildSessions().get(0).sessionId());
+    }
+
+    /**
+     * 跨层集成：真实剪枝与拷贝遍历组合——全部同名子会话失效场景：
+     * 遍历中逐个 remove 触发多次剪枝（每次对底层共享列表 removeIf），快照迭代完整不丢项、不抛 CME，
+     * 全部失效后返回 null 触发新建。
+     */
+    @Test
+    void 集成_真实剪枝与拷贝遍历_全部失效逐个剪除后新建子会话() throws Exception {
+        ContextDataProvider dataProvider = mock(ContextDataProvider.class);
+        SessionManager sessionManager = mock(SessionManager.class);
+        ToolManager toolManager = mock(ToolManager.class);
+        AgentComponentRegistry registry = new AgentComponentRegistry();
+        registry.setContextDataProvider(dataProvider);
+        registry.setSessionManager(sessionManager);
+        registry.setToolManager(toolManager);
+        AgentContextManager realManager = new AgentContextManager(registry);
+
+        String parentId = "1";
+        AgentExecutionContext.ChildSession stale1 = new AgentExecutionContext.ChildSession("999", "test-session", "旧描述", "100");
+        AgentExecutionContext.ChildSession stale2 = new AgentExecutionContext.ChildSession("888", "test-session", "更旧描述", "100");
+        when(dataProvider.loadAgentContext(parentId)).thenReturn(
+                new ContextDataProvider.AgentContextData("100", "parent", "200", 10, List.of(), Map.of(), null,
+                        new ArrayList<>(List.of(stale1, stale2)), null, null));
+        when(sessionManager.getMessages(parentId)).thenReturn(List.of());
+        when(toolManager.getSessionTools(eq(parentId), anyBoolean())).thenReturn(List.of());
+        AgentExecutionContext parentCtx = realManager.build(parentId).build().context();
+
+        // 两个子会话分别入缓存；随后模拟软删：第二次调用返回 null
+        when(dataProvider.loadAgentContext("999")).thenReturn(
+                new ContextDataProvider.AgentContextData("100", "child", "200", 10, List.of(), Map.of(), parentId, null, null, null),
+                null);
+        when(dataProvider.loadAgentContext("888")).thenReturn(
+                new ContextDataProvider.AgentContextData("100", "child", "200", 10, List.of(), Map.of(), parentId, null, null, null),
+                null);
+        realManager.get("999");
+        realManager.get("888");
+
+        when(callback.exists(anyString())).thenReturn(false);
+        Message resultMessage = Message.builder().content("新建成功").build();
+        // 真实 ctx.createChildSession 未注入创建回调 → 新建 ID 为 null
+        when(callback.execute(eq(parentCtx), isNull(), eq("hello"), isNull())).thenReturn(resultMessage);
+        SubSessionCallbackTool realTool = new SubSessionCallbackTool(
+                SubSessionCallbackTool.createToolConfig(), callback, realManager);
+
+        String arguments = """
+                {
+                    "sessionName": "test-session",
+                    "userMessage": "hello"
+                }
+                """;
+
+        String result = realTool.execute(parentCtx, arguments);
+
+        assertEquals("新建成功", result);
+        // 两个失效子会话都被逐个剪除，底层共享列表已清空，且迭代过程未抛 CME
+        assertEquals(0, realManager.get(parentId).agentContextData().childSessions().size());
+        assertEquals(0, parentCtx.getChildSessions().size());
+        verify(callback, times(1)).execute(parentCtx, null, "hello", null);
     }
 }
