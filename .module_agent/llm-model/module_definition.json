@@ -6,10 +6,6 @@
       "description": "前端模型相关 TypeScript 接口定义"
     },
     {
-      "path": "platform-app/src/main/java/com/ghost616/platform/enums/PlatformType.java",
-      "description": "LLM 平台类型枚举：OPENAI/ANTHROPIC/AZURE/OLLAMA/DEEPSEEK/CUSTOM，含 defaultBaseUrl 和 defaultModelNames"
-    },
-    {
       "path": "platform-app/src/main/java/com/ghost616/platform/dto/model/ModelConfigDTO.java",
       "description": "模型配置响应 DTO"
     },

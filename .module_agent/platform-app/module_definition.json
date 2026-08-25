@@ -26,10 +26,6 @@
       "description": "Agent 上下文 Spring 配置类，声明 SystemToolProvider、DefaultChatDataProvider、DefaultChatDataCacheProvider、ModelInvokerFactory、DefaultToolExecutionProvider、SubSessionResultFallbackHook（构造注入 SubSessionResultProvider 实现，注册为 Spring Bean 供 DefaultChatDataProvider.getHooks() 自动收集）、AgentAssembler、SessionManager、AgentContextManager、ToolManager、ModelInvokerManager、ChatService、ChatDataCacheManager、ToolExecutionService 的 @Bean；chatService() 注入 DatabaseAgentLog，在 agentAssembler.build() 后调用 setAgentLog 注册到 AgentComponentRegistry 并调用 refreshHooks；defaultChatDataCacheProvider() 返回 new DefaultChatDataCacheProvider()；chatDataCacheManager(DatabaseAgentLog, DefaultChatDataCacheProvider) 注入 provider 包装为 ChatDataCacheManager，DatabaseAgentLog 非 null 时调用 cacheManager.setAgentLog 注入日志"
     },
     {
-      "path": "platform-app/src/main/java/com/ghost616/platform/service/agent/ChatService.java",
-      "description": "聊天服务核心实现，处理用户消息、技能加载、历史折叠、LLM 流式调用、钩子触发等完整对话流程。import HookInvoker/SystemHook/SystemPostHook 自 agent-base 包。"
-    },
-    {
       "path": "platform-app/src/main/java/com/ghost616/platform/controller/ToolExecutionController.java",
       "description": "工具执行控制器，提供工具执行、状态轮询、继续对话等 HTTP 接口，业务逻辑委托给 agent-base 的 ToolExecutionService；注入 ToolConfigService 和 DefaultSubSessionCallback，在 toolStatus 方法中根据 ToolConfig 构建 ToolConfigBrief（id=String.valueOf(toolConfig.getId())，subToolType=toolConfig.getSubToolType().getCode()，toolName=toolConfig.getName()）赋值给 dto.toolConfig，并检测 _sys_callback_sub_session 子会话回调流程设置 needsSubSessionFlow；executeTools 和 toolStatus 接口返回 ToolStatusResultDTO 统一响应体"
     },

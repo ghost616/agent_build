@@ -46,10 +46,6 @@
       "description": "LLM 平台类型枚举，定义支持的平台（OPENAI/ANTHROPIC/AZURE/OLLAMA/DEEPSEEK/KIMI/VOLCENGINE/CUSTOM）及其默认 BaseUrl 和模型列表"
     },
     {
-      "path": "src/main/resources/browser/browser_tool_executor.js",
-      "description": "JS 工具执行引擎，定义 AgentExecutionContext 对象、ToolFunction 工具函数、ToolManager 工具函数管理器（按 toolName 绑定/添加/移除/get）及四个执行函数：getAgentExecutionContext/getToolResult/passToolResult/execute"
-    },
-    {
       "path": "agent-integration/src/main/java/com/ghost616/agentinteg/tool/BrowserToolInvoker.java",
       "description": "浏览器工具调用器，继承 CustomToolInvoker。构造函数注入 BrowserToolProvider 回调，execute() 方法将 sessionId/toolId/toolName/toolParams 委托给回调执行并返回结果，提供 loadJsContent() 方法从 classpath 加载 JS 引擎文件"
     },
@@ -200,22 +196,6 @@
     {
       "path": "agent-integration/src/test/java/com/ghost616/agentinteg/tool/HistoryQueryToolTest.java",
       "description": "HistoryQueryTool 单元测试，覆盖 createToolConfig（CUSTOM 类型、工具名、参数 schema）、execute 正常路径（seqs/includeReasoning 透传、reasoning 按需返回、toolCalls/toolResult 序列化）、includeReasoning 默认 false 不返回 reasoning、无匹配消息返回空列表、provider 返回 null 返回空列表、缺少/空/含非整数 seqs 的错误场景、无法获取会话 ID、provider 异常场景。"
-    },
-    {
-      "path": "src/main/java/com/ghost616/agentinteg/tool/SubSessionCallbackTool.java",
-      "description": "自定义工具调用器（继承 CustomToolInvoker，非 SystemTool），工具名 callback_sub_session。构造函数注入 ToolConfigDTO、SubSessionCallback 回调与 AgentContextManager（三参构造），提供静态 createToolConfig() 生成 ToolConfigDTO（toolType=CUSTOM、id=null、name=callback_sub_session，描述与参数 schema 内置于 DTO，id 由注册方设置为工具名）；execute() 解析 JSON 参数后先按 sessionName 精确匹配 ctx.getChildSessions() 复用已存在子会话——命中后调用 callback.exists(childSessionId) 校验有效性，存在则复用（忽略 description/toolNames/skillNames 直接回调发送消息），不存在（子会话已删除）则调用 agentContextManager.remove(childSessionId) 清理失效上下文缓存并继续查找其他匹配会话，全部匹配会话均无效时返回 null 走新建逻辑；未命中时按 toolNames/skillNames 从上下文匹配获取 toolIds/skillIds 调用 createChildSession 创建子会话，通过注入的 callback.execute() 执行用户消息并返回消息内容；支持 thinking 参数透传给回调；异常时返回 {\"status\":\"error\",\"errMsg\":...} JSON。"
-    },
-    {
-      "path": "src/test/java/com/ghost616/agentinteg/tool/SubSessionCallbackToolTest.java",
-      "description": "SubSessionCallbackTool 单元测试：覆盖 createToolConfig 元数据（CUSTOM 类型/工具名 callback_sub_session/描述与参数 schema 含 thinking 字段）与 execute 全部分支（正常创建子会话、thinking true/false/null 传递、toolNames/skillNames 为 null 或空数组、description 为 null、JSON 解析异常、回调抛异常、toolNames 匹配/部分匹配过滤、会话名已存在复用/不存在新建/其他名称不复用、命中同名会话但已失效清理缓存并新建、同名会话多个首个失效第二个有效复用第二个、全部同名会话失效清理后新建）。"
-    },
-    {
-      "path": "src/main/java/com/ghost616/agentinteg/tool/SendResultToParentTool.java",
-      "description": "自定义工具调用器（继承 CustomToolInvoker，非 SystemTool），工具名 send_result_to_parent。构造函数注入 ToolConfigDTO，提供静态 createToolConfig() 生成 ToolConfigDTO（toolType=CUSTOM、id=null、name=send_result_to_parent，description 描述向父会话发送子会话执行结果，parameterSchema 含单个必填参数 result（string））；execute() 解析 arguments 获取 result 参数（缺失/空白返回错误 JSON），从 ctx.getParentSessionId() 获取父会话 ID，无父会话 ID 时返回 {\"status\":\"error\",\"errMsg\":\"当前会话不是子会话，无法发送结果到父会话\"}，有父会话 ID 时调用 ctx.sendParentMessage(result)（agent-base AgentExecutionContext 新方法，内部从 parentSessionId 获取父会话 ID 并通过 sendParentMessageCallback 发送到父会话，null/空白与 callback 为 null 时静默忽略）并返回 {\"status\":\"success\",\"message\":\"已发送执行结果到父会话\"}；缺少 result 参数返回错误 JSON，异常捕获使用 JsonMapper 序列化错误 JSON。"
-    },
-    {
-      "description": "SendResultToParentTool 单元测试：覆盖 createToolConfig 元数据（CUSTOM 类型/工具名 send_result_to_parent/id=null/描述非空/参数 schema 含 result 与 required）与 execute 分支（正常路径调用 ctx.sendUserMessage(parentSessionId, result, modelId, null) 返回成功 JSON、无父会话 ID 返回错误 JSON 且不调用 sendUserMessage、缺少 result 参数返回错误 JSON、JSON 解析异常返回错误 JSON）。",
-      "path": "src/test/java/com/ghost616/agentinteg/tool/SendResultToParentToolTest.java"
     },
     {
       "path": "agent-integration/src/main/java/com/ghost616/agentinteg/subsession/SubSessionResultProvider.java",
