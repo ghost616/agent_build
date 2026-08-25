@@ -1,0 +1,17 @@
+{
+  "plan_id": "plan_8444a2e8-4463-4aa2-a3a9-205c9f32798b",
+  "module_name": "platform-data",
+  "development_plan": "message_tool_call 与 message_image 软删除——持久化层。任务：1) entity/MessageToolCall.java 加 @TableLogic(value=\"0\", delval=\"1\") 的 deleted 字段（Integer，参照 Message 实体风格）；2) entity/MessageImage.java 加 @TableLogic deleted 字段；3) schema-message.sql 的 message_tool_call 表与 message_image 表加 deleted INTEGER DEFAULT 0 列；4) MessageSchemaMigration 增量迁移（message_tool_call、message_image 两张表新增 deleted 列，默认 '0'）；5) MessageToolCallMapper.deleteByMessageIds 自定义 @Delete SQL 改为软删（@Update UPDATE message_tool_call SET deleted=1 WHERE message_id IN <foreach>）；6) 同步更新受影响测试（含 SchemaMigrationTest 迁移计数）。",
+  "session_id": "dd03efd4-cd9c-4109-923d-40442c6a77d1",
+  "modified_files": [
+    "platform-data/src/main/java/com/ghost616/platform/entity/MessageToolCall.java",
+    "platform-data/src/main/java/com/ghost616/platform/entity/MessageImage.java",
+    "platform-data/src/main/resources/schema-message.sql",
+    "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java",
+    "platform-data/src/main/java/com/ghost616/platform/repository/MessageToolCallMapper.java",
+    "platform-data/src/test/java/com/ghost616/platform/MessageToolCallSchemaTest.java",
+    "platform-data/src/test/java/com/ghost616/platform/MessageImageSchemaTest.java",
+    "platform-data/src/test/java/com/ghost616/platform/repository/MessageToolCallMapperTest.java",
+    "platform-app/src/test/java/com/ghost616/platform/migration/SchemaMigrationTest.java"
+  ]
+}

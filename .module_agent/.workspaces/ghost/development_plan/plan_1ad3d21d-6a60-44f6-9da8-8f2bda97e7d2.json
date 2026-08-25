@@ -1,0 +1,13 @@
+{
+  "plan_id": "plan_1ad3d21d-6a60-44f6-9da8-8f2bda97e7d2",
+  "module_name": "platform-app",
+  "development_plan": "message_tool_call 与 message_image 软删除——各删除路径补充。任务：1) EvaluationServiceImpl.delete（评估删除）执行会话与基准会话删除块：补充 messageImageMapper 软删（LambdaQueryWrapper in messageId，@TableLogic 自动 UPDATE deleted=1）；message_tool_call 经 deleteByMessageIds 改软删后自动生效；2) EvaluationServiceImpl.deleteResult 同样补充 message_image 软删；3) AgentEvaluationServiceImpl.delete 关联会话删除块补充 message_image 软删；4) SessionServiceImpl.deleteSession（子会话删除）补充 message_tool_call 与 message_image 软删（按会话消息 messageId 集合）；5) DefaultMessageDataProvider.rollbackToLastUserMessage 验证 message_tool_call/message_image 的 delete 在 @TableLogic 下自动软删（无需改代码，确认即可）；6) 同步更新受影响单元测试。",
+  "session_id": "2855cec7-1fb0-4a8e-b43c-aea6bd1f4ad0",
+  "modified_files": [
+    "platform-app/src/main/java/com/ghost616/platform/service/evaluation/EvaluationServiceImpl.java",
+    "platform-app/src/main/java/com/ghost616/platform/service/agent_evaluation/AgentEvaluationServiceImpl.java",
+    "platform-app/src/main/java/com/ghost616/platform/service/session/SessionServiceImpl.java",
+    "platform-app/src/test/java/com/ghost616/platform/service/evaluation/EvaluationServiceImplTest.java",
+    "platform-app/src/test/java/com/ghost616/platform/session/SessionServiceImplTest.java"
+  ]
+}

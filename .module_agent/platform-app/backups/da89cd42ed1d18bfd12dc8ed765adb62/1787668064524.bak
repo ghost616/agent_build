@@ -4,16 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ghost616.platform.dto.session.SessionDTO;
 import com.ghost616.platform.entity.AgentTool;
 import com.ghost616.platform.entity.Message;
-import com.ghost616.platform.entity.MessageImage;
-import com.ghost616.platform.entity.MessageToolCall;
 import com.ghost616.platform.entity.Session;
 import com.ghost616.platform.entity.SessionSkill;
 import com.ghost616.platform.entity.SessionTool;
 import com.ghost616.platform.entity.SessionVariable;
 import com.ghost616.platform.repository.AgentToolMapper;
 import com.ghost616.platform.repository.MessageMapper;
-import com.ghost616.platform.repository.MessageImageMapper;
-import com.ghost616.platform.repository.MessageToolCallMapper;
 import com.ghost616.platform.repository.SessionMapper;
 import com.ghost616.platform.repository.SessionSkillMapper;
 import com.ghost616.platform.repository.SessionToolMapper;
@@ -47,8 +43,6 @@ public class SessionServiceImpl implements SessionService {
     private final AgentContextManager agentContextManager;
     private final ToolManager toolManager;
     private final MessageMapper messageMapper;
-    private final MessageToolCallMapper messageToolCallMapper;
-    private final MessageImageMapper messageImageMapper;
     private final DefaultMessageDataProvider defaultMessageDataProvider;
     private final MessageService messageService;
     private final SessionVariableMapper sessionVariableMapper;
@@ -118,11 +112,10 @@ public class SessionServiceImpl implements SessionService {
     }
 
     /**
-     * 删除会话（级联假删）：会话、消息、消息工具调用（deleteByMessageIds 软删）、消息图片映射
-     * 及会话工具/变量/技能关联均软删（deleted=1，物理数据保留），不递归删除子孙会话；
-     * 保留上下文与工具缓存清理。
+     * 删除会话（级联假删）：会话、消息、会话工具/变量/技能关联均通过 @TableLogic
+     * 软删（deleted=1，物理数据保留），不递归删除子孙会话；保留上下文与工具缓存清理。
      *
-     * <p>不声明 @Transactional：消息相关操作经 {@code @DS("message")} 路由到 message 数据源，
+     * <p>不声明 @Transactional：消息假删经 {@code @DS("message")} 路由到 message 数据源，
      * 在主库事务内 @DS 路由会失效（与 rollback 拆分事务策略一致），故各数据源操作自行提交。</p>
      */
     @Override
@@ -147,19 +140,9 @@ public class SessionServiceImpl implements SessionService {
         skillWrapper.eq(SessionSkill::getSessionId, id);
         sessionSkillMapper.delete(skillWrapper);
 
-        // 查询会话消息（message 数据源）获取消息 ID 集合，用于消息关联假删
+        // 消息假删（message 数据源，@TableLogic delete → UPDATE message SET deleted=1）
         LambdaQueryWrapper<Message> messageWrapper = new LambdaQueryWrapper<>();
         messageWrapper.eq(Message::getSessionId, id);
-        List<Message> messages = messageMapper.selectList(messageWrapper);
-        List<Long> messageIds = messages.stream().map(Message::getId).toList();
-        if (!messageIds.isEmpty()) {
-            // 消息工具调用假删（deleteByMessageIds 已改软删 → UPDATE message_tool_call SET deleted=1）
-            messageToolCallMapper.deleteByMessageIds(messageIds);
-            // 消息图片映射假删（@TableLogic delete → UPDATE message_image SET deleted=1）
-            messageImageMapper.delete(new LambdaQueryWrapper<MessageImage>()
-                    .in(MessageImage::getMessageId, messageIds));
-        }
-        // 消息假删（message 数据源，@TableLogic delete → UPDATE message SET deleted=1）
         messageMapper.delete(messageWrapper);
 
         // 会话假删（@TableLogic deleteById → UPDATE session SET deleted=1）

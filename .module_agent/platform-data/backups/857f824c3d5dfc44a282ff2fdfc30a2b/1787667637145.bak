@@ -106,28 +106,6 @@ class MessageToolCallSchemaTest {
                 "missing migration: message_tool_call.web_search_call");
         assertTrue(content.contains("new Migration(\"message_tool_call\", \"custom_tool_call\", \"TEXT\", null)"),
                 "missing migration: message_tool_call.custom_tool_call");
-        assertTrue(content.contains("new Migration(\"message_tool_call\", \"deleted\", \"INTEGER\", \"0\")"),
-                "missing migration: message_tool_call.deleted");
-    }
-
-    @Test
-    void messageSchemaSqlShouldContainMessageToolCallDeletedColumn() throws IOException {
-        String sql = readResource("schema-message.sql");
-        assertTrue(sql.contains("custom_tool_call    TEXT,\n    deleted             INTEGER DEFAULT 0"),
-                "schema-message.sql message_tool_call should contain deleted column with default 0");
-    }
-
-    @Test
-    void messageToolCallDeleteByMessageIdsShouldSoftDelete() throws IOException {
-        Path path = Paths.get("src/main/java/com/ghost616/platform/repository/MessageToolCallMapper.java");
-        assertTrue(Files.exists(path), "MessageToolCallMapper source file should exist");
-        String content = Files.readString(path, StandardCharsets.UTF_8);
-        assertTrue(content.contains("@Update"),
-                "deleteByMessageIds should use @Update for soft delete");
-        assertTrue(content.contains("UPDATE message_tool_call SET deleted=1 WHERE message_id IN"),
-                "deleteByMessageIds should soft-delete via UPDATE SET deleted=1");
-        assertFalse(content.contains("@Delete"),
-                "deleteByMessageIds should not use hard @Delete");
     }
 
     @Test

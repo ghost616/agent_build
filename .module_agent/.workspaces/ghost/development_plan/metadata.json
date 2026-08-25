@@ -94,5 +94,21 @@
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
+  },
+  {
+    "plan_id": "plan_8444a2e8-4463-4aa2-a3a9-205c9f32798b",
+    "plan_summary": "message_tool_call 与 message_image 软删除——持久化层",
+    "starter_session_id": "093ed1ff-838a-45fe-b4a6-7ead5dfb67c1",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_1ad3d21d-6a60-44f6-9da8-8f2bda97e7d2",
+    "plan_summary": "message_tool_call 与 message_image 软删除——各删除路径补充",
+    "starter_session_id": "093ed1ff-838a-45fe-b4a6-7ead5dfb67c1",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
   }
 ]

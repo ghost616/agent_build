@@ -19,5 +19,22 @@
     ],
     "summary": "执行总结：本轮完成子会话删除的软删除持久化层，共修改 11 个文件、新增 2 个测试资源文件。1) Message/SessionTool/SessionSkill 实体新增 @TableLogic(value=\"0\", delval=\"1\") deleted 字段（Integer）；Session 已通过 BaseEntity 继承该字段（session 表已有 deleted 列），未重复声明；2) schema-message.sql message 表新增 deleted INTEGER DEFAULT 0 列，MessageSchemaMigration 新增 message.deleted 迁移（消息迁移总数 15→16）；3) 实测 schema.sql 与运行时库 session_tool/session_skill 表均无 deleted 列（任务描述\"表已有列\"与实际不符），已补 schema.sql 两表 DDL deleted INTEGER DEFAULT 0 列及 PrimarySchemaMigration 两个迁移条目（主迁移总数 90→92）；4) MessageMapper 的 rollbackBySessionIdAndGeSequenceNum/selectByConversationId/countUserMessages/findNthUserSequenceNum 四个自定义 SQL 手动追加 AND deleted = 0 条件（@TableLogic 不作用于自定义 SQL）；5) 测试同步：MessageMapperTest 新增 5 个软删除过滤用例（测试表加 deleted 列），SessionEntityTest 新增 3 个 deleted 字段用例，platform-app SchemaMigrationTest 计数 PRIMARY 90→92、MESSAGE 15→16。\n测试总结：全部测试通过。单元测试 MessageMapperTest+SessionEntityTest 16/16 通过（含 8 个新用例）；platform-data 全量回归 75/75 通过；platform-app SchemaMigrationTest 15/15 通过（PRIMARY_ALTER_COUNT=92、MESSAGE_ALTER_COUNT=16 与实际迁移条数一致）；5 模块编译 BUILD SUCCESS。总计 106 个自动化用例全部通过，失败 0，跳过 0（E2E 不适用，纯后端变更）。环境说明：JDK 21 下 Mockito inline mock maker 初始化失败（JEP 451），已在 platform-data/platform-app test resources 添加 mock-maker-subclass 配置解决（建议保留）；agent-base 既有测试源码编译失败为遗留问题，与本变更无关。",
     "errors": []
+  },
+  {
+    "plan_id": "plan_8444a2e8-4463-4aa2-a3a9-205c9f32798b",
+    "plan": "message_tool_call 与 message_image 软删除——持久化层",
+    "modified_files": [
+      "platform-data/src/main/java/com/ghost616/platform/entity/MessageToolCall.java",
+      "platform-data/src/main/java/com/ghost616/platform/entity/MessageImage.java",
+      "platform-data/src/main/resources/schema-message.sql",
+      "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java",
+      "platform-data/src/main/java/com/ghost616/platform/repository/MessageToolCallMapper.java",
+      "platform-data/src/test/java/com/ghost616/platform/MessageToolCallSchemaTest.java",
+      "platform-data/src/test/java/com/ghost616/platform/MessageImageSchemaTest.java",
+      "platform-data/src/test/java/com/ghost616/platform/repository/MessageToolCallMapperTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/migration/SchemaMigrationTest.java"
+    ],
+    "summary": "执行总结：本轮完成 message_tool_call 与 message_image 软删除持久化层，共修改 8 个文件、新建 1 个测试文件。1) MessageToolCall/MessageImage 实体新增 @TableLogic(value=\"0\", delval=\"1\") deleted 字段（Integer，参照 Message 实体风格）；2) schema-message.sql 的 message_tool_call、message_image 表新增 deleted INTEGER DEFAULT 0 列；3) MessageSchemaMigration 新增 message_tool_call.deleted、message_image.deleted 两条迁移（消息迁移总数 16→18）；4) MessageToolCallMapper.deleteByMessageIds 由 @Delete 物理删除改为 @Update 软删除（UPDATE message_tool_call SET deleted=1 WHERE message_id IN <foreach> AND deleted=0，额外加 AND deleted=0 保证幂等；方法签名不变，platform-app 各调用方无需改动）；5) 测试同步：SchemaMigrationTest MESSAGE_ALTER_COUNT 16→18；MessageToolCallSchemaTest 新增 deleted 迁移条目/DDL deleted 列/软删源码断言；MessageImageSchemaTest 新增 deleted 迁移条目/实体 @TableLogic/DDL deleted 列断言；新建 MessageToolCallMapperTest（3 用例覆盖软删行为）。\n测试总结：全部测试通过。单元测试 35/35 通过（MessageToolCallMapperTest 3、MessageToolCallSchemaTest 9、MessageImageSchemaTest 7、MessageMapperTest 11、SessionEntityTest 5）；platform-data 全量回归 81/81 通过；platform-app SchemaMigrationTest 15/15 通过（MESSAGE_ALTER_COUNT=18 与实际一致，PRIMARY=92 未变）；5 模块编译 BUILD SUCCESS。总计 131 个自动化用例全部通过，失败 0，跳过 0（E2E 不适用，纯后端变更）。测试过程说明：离朱修复了新建测试类 MessageToolCallMapperTest 的未提交事务缺陷（openSession() 改 openSession(true) autoCommit），生产逻辑无误；JDK 21 Mockito 兼容沿用上轮 mock-maker-subclass 配置；agent-base 既有测试源码编译失败为遗留问题，与本变更无关。",
+    "errors": []
   }
 ]

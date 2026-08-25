@@ -98,8 +98,6 @@ class MessageImageSchemaTest {
                 "MessageImage should map img_id field");
         assertTrue(content.contains("@TableField(\"img_text\")"),
                 "MessageImage should map img_text field");
-        assertTrue(content.contains("@TableLogic(value = \"0\", delval = \"1\")"),
-                "MessageImage should declare @TableLogic deleted field");
     }
 
     @Test
@@ -113,14 +111,5 @@ class MessageImageSchemaTest {
                 "missing migration: message_image.img_id");
         assertTrue(content.contains("new Migration(\"message_image\", \"img_text\", \"MEDIUMTEXT\", null)"),
                 "missing migration: message_image.img_text");
-        assertTrue(content.contains("new Migration(\"message_image\", \"deleted\", \"INTEGER\", \"0\")"),
-                "missing migration: message_image.deleted");
-    }
-
-    @Test
-    void messageSchemaSqlShouldContainMessageImageDeletedColumn() throws IOException {
-        String sql = readResource("schema-message.sql");
-        assertTrue(sql.contains("img_text     MEDIUMTEXT,\n    deleted      INTEGER DEFAULT 0"),
-                "schema-message.sql message_image should contain deleted column with default 0");
     }
 }

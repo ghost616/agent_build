@@ -16,6 +16,7 @@ import com.ghost616.platform.repository.AgentToolMapper;
 import com.ghost616.platform.entity.Evaluation;
 import com.ghost616.platform.entity.EvaluationResult;
 import com.ghost616.platform.entity.Message;
+import com.ghost616.platform.entity.MessageImage;
 import com.ghost616.platform.entity.MessageToolCall;
 import com.ghost616.platform.entity.Session;
 import com.ghost616.platform.entity.SessionSkill;
@@ -26,6 +27,7 @@ import com.ghost616.platform.repository.AgentEvaluationMapper;
 import com.ghost616.platform.repository.EvaluationMapper;
 import com.ghost616.platform.repository.EvaluationResultMapper;
 import com.ghost616.platform.repository.MessageMapper;
+import com.ghost616.platform.repository.MessageImageMapper;
 import com.ghost616.platform.repository.MessageToolCallMapper;
 import com.ghost616.platform.repository.SessionMapper;
 import com.ghost616.platform.repository.SessionSkillMapper;
@@ -53,6 +55,7 @@ public class EvaluationServiceImpl implements EvaluationService {
     private final SessionMapper sessionMapper;
     private final MessageMapper messageMapper;
     private final MessageToolCallMapper messageToolCallMapper;
+    private final MessageImageMapper messageImageMapper;
     private final SessionVariableMapper sessionVariableMapper;
     private final SessionToolMapper sessionToolMapper;
     private final SessionSkillMapper sessionSkillMapper;
@@ -225,6 +228,8 @@ public class EvaluationServiceImpl implements EvaluationService {
             if (!messages.isEmpty()) {
                 List<Long> messageIds = messages.stream().map(Message::getId).toList();
                 messageToolCallMapper.deleteByMessageIds(messageIds);
+                messageImageMapper.delete(new LambdaQueryWrapper<MessageImage>()
+                        .in(MessageImage::getMessageId, messageIds));
                 messageMapper.delete(msgWrapper);
             }
 
@@ -247,6 +252,8 @@ public class EvaluationServiceImpl implements EvaluationService {
             if (!messages.isEmpty()) {
                 List<Long> messageIds = messages.stream().map(Message::getId).toList();
                 messageToolCallMapper.deleteByMessageIds(messageIds);
+                messageImageMapper.delete(new LambdaQueryWrapper<MessageImage>()
+                        .in(MessageImage::getMessageId, messageIds));
                 messageMapper.delete(msgWrapper);
             }
 
@@ -290,6 +297,8 @@ public class EvaluationServiceImpl implements EvaluationService {
         if (!messages.isEmpty()) {
             List<Long> messageIds = messages.stream().map(Message::getId).toList();
             messageToolCallMapper.deleteByMessageIds(messageIds);
+            messageImageMapper.delete(new LambdaQueryWrapper<MessageImage>()
+                    .in(MessageImage::getMessageId, messageIds));
             messageMapper.delete(msgWrapper);
         }
 

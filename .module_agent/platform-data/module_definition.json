@@ -47,7 +47,7 @@
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/entity/MessageToolCall.java",
-      "description": "工具调用记录实体，@TableName(\"message_tool_call\")"
+      "description": "工具调用记录实体，@TableName(\"message_tool_call\")，含 id/messageId/toolCallId/toolCallName/toolCallArguments/type（默认 function）/webSearchCall/customToolCall 及 @TableLogic(value=\"0\", delval=\"1\") deleted 字段（Integer，软删除标记，默认 0 未删除/1 已删除）"
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/entity/SessionTool.java",
@@ -103,7 +103,7 @@
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/repository/MessageToolCallMapper.java",
-      "description": "MessageToolCall 实体的 MyBatis-Plus Mapper 接口，继承 BaseMapper，提供 deleteByMessageIds 批量删除；标注 @DS(\"message\") 注解路由至副数据源，与 message/agent_log 同库"
+      "description": "MessageToolCall 实体的 MyBatis-Plus Mapper 接口，继承 BaseMapper，提供 deleteByMessageIds 批量软删除（@Update UPDATE message_tool_call SET deleted=1 WHERE message_id IN (...) AND deleted=0，幂等不重复更新已软删记录）；标注 @DS(\"message\") 注解路由至副数据源，与 message/agent_log 同库"
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/repository/SessionToolMapper.java",
@@ -227,15 +227,15 @@
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/config/MessageSchemaMigration.java",
-      "description": "消息数据源 Schema 迁移组件（@Component @Order(1)），注入 @Qualifier(\"messageJdbcTemplate\") 的 JdbcTemplate，通过 ScriptUtils 执行 classpath 下 schema-message.sql 建 message/agent_log/message_tool_call/message_image 四表；建表失败时抛 IllegalStateException fail-fast 终止启动；再执行四表 16 条 ALTER TABLE 增量列迁移（message.tool_result/token_usage/conversation_id/rollback/user_input/deleted、agent_log.session_variables/conversation_variables、message_tool_call.type/web_search_call/custom_tool_call、message.user_id/agent_log.user_id、message_image.message_id/img_id/img_text）"
+      "description": "消息数据源 Schema 迁移组件（@Component @Order(1)），注入 @Qualifier(\"messageJdbcTemplate\") 的 JdbcTemplate，通过 ScriptUtils 执行 classpath 下 schema-message.sql 建 message/agent_log/message_tool_call/message_image 四表；建表失败时抛 IllegalStateException fail-fast 终止启动；再执行四表 18 条 ALTER TABLE 增量列迁移（message.tool_result/token_usage/conversation_id/rollback/user_input/deleted、agent_log.session_variables/conversation_variables、message_tool_call.type/web_search_call/custom_tool_call/deleted、message.user_id/agent_log.user_id、message_image.message_id/img_id/img_text/deleted）"
     },
     {
       "path": "platform-data/src/main/resources/schema-message.sql",
-      "description": "消息数据源 DDL 初始化脚本，含 message、agent_log、message_tool_call、message_image 四张表的建表语句和索引（message_tool_call 含 message_id/tool_call_id 索引，message_image 含 message_id 索引）；message 与 agent_log 表含 user_id BIGINT DEFAULT 1 列，message 表含 user_input TINYINT(1) DEFAULT 1 列（区分用户输入与会话间传递的 user 消息，存量默认视为用户输入）及 deleted INTEGER DEFAULT 0 列（软删除标记）；由 MessageSchemaMigration 在消息数据源上执行，确保四表齐全"
+      "description": "消息数据源 DDL 初始化脚本，含 message、agent_log、message_tool_call、message_image 四张表的建表语句和索引（message_tool_call 含 message_id/tool_call_id 索引，message_image 含 message_id 索引）；message 与 agent_log 表含 user_id BIGINT DEFAULT 1 列，message 表含 user_input TINYINT(1) DEFAULT 1 列（区分用户输入与会话间传递的 user 消息，存量默认视为用户输入）；message/message_tool_call/message_image 三表含 deleted INTEGER DEFAULT 0 列（软删除标记）；由 MessageSchemaMigration 在消息数据源上执行，确保四表齐全"
     },
     {
       "path": "platform-data/src/test/java/com/ghost616/platform/MessageToolCallSchemaTest.java",
-      "description": "message_tool_call 跨库一致性验证测试：断言 schema.sql 不含 message_tool_call 建表/索引、schema-message.sql 含其建表与 message_id/tool_call_id 索引、H2 执行后 message/agent_log/message_tool_call 三表齐全、MessageToolCallMapper 带 @DS(\"message\")、MessageSchemaMigration 含 message_tool_call 三条迁移而 PrimarySchemaMigration 不含、MessageSchemaMigration 建表失败 fail-fast 抛 IllegalStateException"
+      "description": "message_tool_call 跨库一致性验证测试：断言 schema.sql 不含 message_tool_call 建表/索引、schema-message.sql 含其建表与 message_id/tool_call_id 索引、H2 执行后 message/agent_log/message_tool_call 三表齐全、MessageToolCallMapper 带 @DS(\"message\")、MessageSchemaMigration 含 message_tool_call 四条迁移（type/web_search_call/custom_tool_call/deleted）而 PrimarySchemaMigration 不含、schema-message.sql 中 message_tool_call 表含 deleted 列、MessageToolCallMapper.deleteByMessageIds 为 @Update 软删（非 @Delete）、MessageSchemaMigration 建表失败 fail-fast 抛 IllegalStateException"
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/entity/User.java",
@@ -247,7 +247,7 @@
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/entity/MessageImage.java",
-      "description": "消息图片映射实体（message_image 表），不继承 BaseEntity，含雪花ID（@JsonSerialize ToStringSerializer）、关联消息ID（messageId）、图片标识（imgId，String）、大模型图像理解结果文本（imgText）"
+      "description": "消息图片映射实体（message_image 表），不继承 BaseEntity，含雪花ID（@JsonSerialize ToStringSerializer）、关联消息ID（messageId）、图片标识（imgId，String）、大模型图像理解结果文本（imgText）及 @TableLogic(value=\"0\", delval=\"1\") deleted 字段（Integer，软删除标记，默认 0 未删除/1 已删除）"
     },
     {
       "path": "platform-data/src/main/java/com/ghost616/platform/repository/MessageImageMapper.java",
@@ -255,11 +255,15 @@
     },
     {
       "path": "platform-data/src/test/java/com/ghost616/platform/MessageImageSchemaTest.java",
-      "description": "消息图片映射表 Schema 测试，验证 schema.sql 不含 message_image、schema-message.sql 含 message_image 建表语句与 message_id 索引、schema-message.sql 在 H2 可执行并建成 message_image 表、MessageImageMapper 标注 @DS(\"message\") 且继承 BaseMapper、MessageImage 实体含 @TableName 及三个字段映射注解、MessageSchemaMigration 含 message_image 三条迁移条目"
+      "description": "消息图片映射表 Schema 测试，验证 schema.sql 不含 message_image、schema-message.sql 含 message_image 建表语句与 message_id 索引及 deleted 列、schema-message.sql 在 H2 可执行并建成 message_image 表、MessageImageMapper 标注 @DS(\"message\") 且继承 BaseMapper、MessageImage 实体含 @TableName 及字段映射注解与 @TableLogic deleted 字段、MessageSchemaMigration 含 message_image 四条迁移条目（message_id/img_id/img_text/deleted）"
     },
     {
       "path": "platform-data/src/test/java/com/ghost616/platform/repository/MessageMapperTest.java",
       "description": "MessageMapper 的 MyBatis 集成测试（H2 内存库 + 原生 MyBatis SqlSession），覆盖 rollbackBySessionIdAndGeSequenceNum/selectByConversationId/countUserMessages/findNthUserSequenceNum；其中 countUserMessages 与 findNthUserSequenceNum 验证 user_input=1 过滤（仅统计用户输入型 user 消息）；测试表含 deleted 列并覆盖四个方法的 deleted=1 软删除过滤（软删除消息不参与查询/统计/回滚）"
+    },
+    {
+      "description": "MessageToolCallMapper.deleteByMessageIds 软删除行为集成测试（H2 内存库 + 原生 MyBatis SqlSession），覆盖软删除匹配消息记录（数据保留 deleted=1）、幂等性（不影响已软删记录）、不匹配返回 0",
+      "path": "platform-data/src/test/java/com/ghost616/platform/repository/MessageToolCallMapperTest.java"
     }
   ]
 }

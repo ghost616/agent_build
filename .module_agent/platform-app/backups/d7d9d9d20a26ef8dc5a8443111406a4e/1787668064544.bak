@@ -43,8 +43,6 @@ class EvaluationServiceImplTest {
     @Mock
     private MessageToolCallMapper messageToolCallMapper;
     @Mock
-    private MessageImageMapper messageImageMapper;
-    @Mock
     private SessionVariableMapper sessionVariableMapper;
     @Mock
     private SessionToolMapper sessionToolMapper;
@@ -80,7 +78,7 @@ class EvaluationServiceImplTest {
     void setUp() {
         service = new EvaluationServiceImpl(
                 evaluationMapper, evaluationResultMapper, sessionMapper,
-                messageMapper, messageToolCallMapper, messageImageMapper, sessionVariableMapper,
+                messageMapper, messageToolCallMapper, sessionVariableMapper,
                 sessionToolMapper, sessionSkillMapper, agentEvaluationMapper,
                 agentConfigMapper, agentToolMapper, agentSkillMapper
         );
@@ -314,7 +312,6 @@ class EvaluationServiceImplTest {
             verify(sessionSkillMapper).delete(any());
             verify(messageMapper).selectList(any());
             verify(messageToolCallMapper).deleteByMessageIds(List.of(MESSAGE_ID_1, MESSAGE_ID_2));
-            verify(messageImageMapper).delete(any());
             verify(messageMapper).delete(any());
             verify(sessionMapper).deleteById(SESSION_ID_LOCAL);
             verify(evaluationResultMapper).deleteById(RESULT_ID);
@@ -335,7 +332,6 @@ class EvaluationServiceImplTest {
             verify(sessionSkillMapper).delete(any());
             verify(messageMapper).selectList(any());
             verify(messageToolCallMapper, never()).deleteByMessageIds(anyList());
-            verify(messageImageMapper, never()).delete(any());
             verify(messageMapper, never()).delete(any());
             verify(sessionMapper).deleteById(SESSION_ID_LOCAL);
             verify(evaluationResultMapper).deleteById(RESULT_ID);
@@ -348,94 +344,6 @@ class EvaluationServiceImplTest {
             BusinessException ex = assertThrows(BusinessException.class,
                     () -> service.deleteResult(RESULT_ID));
             assertEquals(ErrorCode.EVALUATION_RESULT_NOT_FOUND, ex.getErrorCode());
-        }
-    }
-
-    @Nested
-    class DeleteTests {
-
-        private static final Long EVALUATION_ID = 700L;
-        private static final Long BENCHMARK_SESSION_ID = 701L;
-        private static final Long RESULT_SESSION_ID = 702L;
-        private static final Long RESULT_ID = 703L;
-        private static final Long EXEC_MSG_ID_1 = 704L;
-        private static final Long EXEC_MSG_ID_2 = 705L;
-        private static final Long BENCH_MSG_ID_1 = 706L;
-        private static final Long BENCH_MSG_ID_2 = 707L;
-
-        private Evaluation ownedEvaluation() {
-            Evaluation e = new Evaluation();
-            e.setId(EVALUATION_ID);
-            e.setUserId(CURRENT_USER_ID);
-            e.setBenchmarkSessionId(BENCHMARK_SESSION_ID);
-            return e;
-        }
-
-        private EvaluationResult result() {
-            EvaluationResult r = new EvaluationResult();
-            r.setId(RESULT_ID);
-            r.setEvaluationId(EVALUATION_ID);
-            r.setEvaluationSessionId(RESULT_SESSION_ID);
-            return r;
-        }
-
-        private Message message(Long id, Long sessionId) {
-            Message m = new Message();
-            m.setId(id);
-            m.setSessionId(sessionId);
-            return m;
-        }
-
-        @Test
-        void delete_执行会话与基准会话均级联软删含messageImage() {
-            when(evaluationMapper.selectById(EVALUATION_ID)).thenReturn(ownedEvaluation());
-            when(evaluationResultMapper.selectList(any())).thenReturn(List.of(result()));
-            when(messageMapper.selectList(any()))
-                    .thenReturn(List.of(message(EXEC_MSG_ID_1, RESULT_SESSION_ID), message(EXEC_MSG_ID_2, RESULT_SESSION_ID)))
-                    .thenReturn(List.of(message(BENCH_MSG_ID_1, BENCHMARK_SESSION_ID), message(BENCH_MSG_ID_2, BENCHMARK_SESSION_ID)));
-
-            service.delete(EVALUATION_ID);
-
-            // 执行会话块 + 基准会话块：变量/工具/技能各删除两次（两个会话块各一次）+ 消息工具调用 + 消息图片 + 消息 + 会话 级联软删
-            verify(sessionVariableMapper, times(2)).delete(any());
-            verify(sessionToolMapper, times(2)).delete(any());
-            verify(sessionSkillMapper, times(2)).delete(any());
-            verify(messageToolCallMapper).deleteByMessageIds(List.of(EXEC_MSG_ID_1, EXEC_MSG_ID_2));
-            verify(messageMapper, times(2)).delete(any());
-            verify(sessionMapper).deleteById(RESULT_SESSION_ID);
-            // 基准会话块：同样级联软删
-            verify(messageToolCallMapper).deleteByMessageIds(List.of(BENCH_MSG_ID_1, BENCH_MSG_ID_2));
-            verify(messageImageMapper, times(2)).delete(any());
-            verify(sessionMapper).deleteById(BENCHMARK_SESSION_ID);
-            // 评估结果与评估本体
-            verify(evaluationResultMapper).delete(any());
-            verify(evaluationMapper).deleteById(EVALUATION_ID);
-        }
-
-        @Test
-        void delete_无消息时跳过消息关联软删() {
-            when(evaluationMapper.selectById(EVALUATION_ID)).thenReturn(ownedEvaluation());
-            when(evaluationResultMapper.selectList(any())).thenReturn(List.of(result()));
-            when(messageMapper.selectList(any())).thenReturn(List.of());
-
-            service.delete(EVALUATION_ID);
-
-            verify(messageToolCallMapper, never()).deleteByMessageIds(anyList());
-            verify(messageImageMapper, never()).delete(any());
-            verify(messageMapper, never()).delete(any());
-            verify(sessionMapper).deleteById(RESULT_SESSION_ID);
-            verify(sessionMapper).deleteById(BENCHMARK_SESSION_ID);
-            verify(evaluationResultMapper).delete(any());
-            verify(evaluationMapper).deleteById(EVALUATION_ID);
-        }
-
-        @Test
-        void delete_评估不存在_抛EVALUATION_NOT_FOUND() {
-            when(evaluationMapper.selectById(EVALUATION_ID)).thenReturn(null);
-
-            BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(EVALUATION_ID));
-            assertEquals(ErrorCode.EVALUATION_NOT_FOUND, ex.getErrorCode());
-            verify(evaluationMapper, never()).deleteById(any());
         }
     }
 

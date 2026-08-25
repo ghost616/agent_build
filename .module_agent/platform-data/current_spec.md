@@ -14,6 +14,7 @@
 - **MessageImage**：消息图片映射实体，映射 message_image 表，含 id(雪花ID，@JsonSerialize ToStringSerializer)/messageId(关联消息ID)/imgId(图片标识 String)/imgText(大模型图像理解结果文本) 字段，用于大模型图像理解场景的图片-消息映射持久化
 - **Message**：消息实体，映射 message 表，不继承 BaseEntity，含 id(雪花ID，@JsonSerialize ToStringSerializer)/userId/sessionId/role/content/reasoning/sequenceNum/toolCallId/toolResult/tokenUsage/conversationId/rollback/userInput(Boolean，@TableField("user_input")，标识消息是否为用户输入型，用于区分用户直接输入与会话间传递的 user 消息，默认 1 存量视为用户输入)/createTime 字段
 - 软删除字段扩展：Message（不继承 BaseEntity）、SessionTool、SessionSkill 实体新增 @TableLogic(value=\"0\", delval=\"1\") deleted 字段（Integer，0=未删除/1=已删除），MyBatis-Plus BaseMapper 自动附加 deleted=0 条件并将 delete 转为 UPDATE 软删除；Session 经 BaseEntity 继承同名 @TableLogic deleted 字段（session 表已有 deleted 列）
+- 软删除扩展：MessageToolCall、MessageImage 实体新增 @TableLogic(value=\"0\", delval=\"1\") deleted 字段（Integer，0=未删除/1=已删除），MyBatis-Plus BaseMapper 自动附加 deleted=0 条件并将 delete 转为 UPDATE 软删除
 
 ## 数据访问层
 
@@ -23,6 +24,7 @@
 - **MessageImageMapper**：MessageImage 实体的 MyBatis-Plus Mapper 接口，继承 BaseMapper；添加 @DS("message") 注解路由至消息数据源，与 message/agent_log/message_tool_call 同库
 - MessageMapper.countUserMessages/findNthUserSequenceNum 的 @Select SQL 增加 AND user_input = 1 条件：仅统计/查找用户输入型（user_input=1）user 消息，排除会话间传递的 user 消息（记忆点计算用）
 - MessageMapper 的 selectByConversationId/countUserMessages/findNthUserSequenceNum/rollbackBySessionIdAndGeSequenceNum 四个自定义 @Select/@Update SQL 手动追加 AND deleted = 0 条件（@TableLogic 不作用于自定义 SQL），软删除消息不参与查询、统计与回滚
+- MessageToolCallMapper.deleteByMessageIds 由 @Delete 物理删除改为 @Update 软删除（UPDATE message_tool_call SET deleted=1 WHERE message_id IN (...) AND deleted = 0，幂等不重复更新已软删记录）
 
 ## 数据库初始化与迁移
 
@@ -44,6 +46,7 @@ session 表新增 memory_prompt（VARCHAR(500)）列，PrimarySchemaMigration �
 - schema-message.sql 新增 message_image 表建表语句（id/message_id/img_id VARCHAR(255)/img_text MEDIUMTEXT）及 idx_message_image_message_id 索引；MessageSchemaMigration 新增 message_image.message_id/img_id/img_text 三条 ALTER 增量迁移（迁移总数 11→14）
 - message 表新增 user_input TINYINT(1) DEFAULT 1 列（区分用户输入与会话间传递的 user 消息，存量默认视为用户输入）；MessageSchemaMigration 新增 message.user_input（TINYINT(1)，默认 '1'）迁移条目（消息数据源迁移总数 14→15）；platform-app SchemaMigrationTest MESSAGE_ALTER_COUNT 同步 14→15
 - 软删除列迁移：schema-message.sql message 表新增 deleted INTEGER DEFAULT 0 列；MessageSchemaMigration 新增 message.deleted（INTEGER，默认 '0'）迁移条目（消息数据源迁移总数 15→16）；schema.sql session_tool/session_skill 表新增 deleted INTEGER DEFAULT 0 列；PrimarySchemaMigration 新增 session_tool.deleted、session_skill.deleted 两个迁移条目（主数据源迁移总数 90→92）；platform-app SchemaMigrationTest 计数常量同步更新（PRIMARY 90→92、MESSAGE 15→16）
+- 软删除列迁移扩展：schema-message.sql message_tool_call、message_image 表新增 deleted INTEGER DEFAULT 0 列；MessageSchemaMigration 新增 message_tool_call.deleted、message_image.deleted 两个迁移条目（消息数据源迁移总数 16→18）；platform-app SchemaMigrationTest MESSAGE_ALTER_COUNT 16→18 同步更新
 
 ## 统一错误码与异常
 
