@@ -1,0 +1,28 @@
+{
+  "plan_id": "plan_9d2a4ee9-5ad4-4a93-ba6f-2940a6c23e82",
+  "module_name": "agent-base",
+  "development_plan": "HOOK 机制基础设施改造（数据载体泛型接口化 + HookResult 返回值 + 包装类缓存）：\n1. 新增 HookResult 接口（含静态方法 empty()）与 EmptyHookResult 空实现（单例模式，构造私有）。\n2. 将 HookData 具体类改造为 HookData<R extends HookResult> 泛型接口（无方法体，R 为数据载体对应的结果类型）。\n3. ToolHookContext 实现 HookData<EmptyHookResult>（保留原字段与 @Data/@AllArgsConstructor/@NoArgsConstructor 注解不变）。\n4. 新增 ChatChunkHookData 实现 HookData<EmptyHookResult>，封装 ChatChunk 字段并暴露 getChatChunk()，替代原 new HookData(ChatChunk) 用法。\n5. HookInvoker 泛型化：interface HookInvoker<D extends HookData<R>, R extends HookResult>，execute(AgentExecutionContext ctx, D data) 返回类型改为 R。\n6. SystemHook 与 SystemPostHook 泛型化透传：SystemHook<D extends HookData<R>, R extends HookResult> extends HookInvoker<D, R>（保留 getIndex 默认方法），SystemPostHook 同构。\n7. 新增 HookDataMatcher 工具类（final 类、私有构造）：通过反射解析 HookInvoker 实现类的泛型参数 D（沿继承链与接口递归解析，支持类型变量映射），提供静态方法 resolveDataType(HookInvoker) 返回 Class<?>（无法解析返回 null）与 matches(hook, data) 判断匹配。\n8. 新增 HookInvokerWrapper 包装类：构造时接收 HookInvoker 并调用 HookDataMatcher.resolveDataType 预解析 dataType 缓存；提供 getPhase()、getIndex()（委托 SystemHook）、supports(HookData)（dataType 为 null 时放行）、execute(ctx, data)（内部 unchecked 强转委托执行）。\n9. HookManager 改造：缓存字段类型改为 Map<HookPhase, List<HookInvokerWrapper>> 与 List<HookInvokerWrapper>；refreshHooks 遍历原始 HookInvoker 构建 HookInvokerWrapper 放入缓存；triggerHooks/triggerSessionHooks/executePostHooks 统一返回 List<HookResult>（执行前先 supports 判断，不匹配或返回 null 均跳过收集；执行异常记录日志并跳过）；新增泛型方法 <T extends HookResult> T castHookResult(HookResult result, Class<T> clazz)，内部用 clazz.isInstance 判断，result/clazz 为 null 或类型不匹配返回 null。\n10. MessageSavePostHook 适配：implements SystemPostHook<ChatChunkHookData, EmptyHookResult>，execute 参数改为 ChatChunkHookData，返回 EmptyHookResult（无结果返回 null 或 HookResult.empty()）。\n11. ChatService 适配：所有 new HookData(ChatChunk) 调用点改为 new ChatChunkHookData(...)；不消费 triggerHooks 返回的 List<HookResult> 返回值；保持原有触发时机与顺序。\n12. ToolExecutionService 适配：new HookData(new ToolHookContext(...)) 调用点改为直接 new ToolHookContext(...)（其本身即 HookData 实现）；不消费返回值。\n13. 适配 agent-base 模块下全部相关测试（HookManagerTest、ChatServiceTest、ChatServiceResponsesTest、ToolExecutionServiceTest 等）：构造迁移（new HookData → new ChatChunkHookData / 直接 ToolHookContext）、triggerHooks 等 verify 适配、HookInvoker 泛型签名适配；新增 HookDataMatcher 与 HookInvokerWrapper 的单元测试（覆盖：直接实现、经 SystemHook/SystemPostHook 中间接口实现的类型解析；matches 匹配/不匹配/无法解析放行；wrapper supports 与 execute 委托）。\n14. 全部改动后运行 agent-base 模块 Maven 编译与测试，确保编译通过且全部测试（含新增）通过。",
+  "session_id": "7f3990c0-9bec-4c6d-83b8-a39f10aec380",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookResult.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/EmptyHookResult.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ChatChunkHookData.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookData.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ToolHookContext.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookInvoker.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemHook.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemPostHook.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookDataMatcher.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookInvokerWrapper.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookManager.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/MessageSavePostHook.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ChatService.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ToolExecutionService.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookManagerTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceResponsesTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ToolExecutionServiceTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookDataMatcherTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookInvokerWrapperTest.java"
+  ]
+}

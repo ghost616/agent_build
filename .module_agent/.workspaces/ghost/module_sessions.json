@@ -8,7 +8,8 @@
     "a832ea5d-5c17-4533-b3ed-6c9d439ef856",
     "36e0fe2a-4439-464b-af37-0631f1bf70c2",
     "4960ad8b-1f61-41de-b4ad-ae20b961df0f",
-    "5c1170df-6617-4212-ba96-616a6eccdf94"
+    "5c1170df-6617-4212-ba96-616a6eccdf94",
+    "7f3990c0-9bec-4c6d-83b8-a39f10aec380"
   ],
   "platform-app": [
     "15c35344-f761-4320-abbe-3b0a79977f34",
@@ -28,6 +29,7 @@
   ],
   "agent-integration": [
     "73d237e7-76ba-4787-a84f-0dfd8090f341",
-    "accd0924-8da5-465b-9a84-5a66163ec6ab"
+    "accd0924-8da5-465b-9a84-5a66163ec6ab",
+    "09f6bbf9-916d-4103-99bf-7ac8f6e60338"
   ]
 }

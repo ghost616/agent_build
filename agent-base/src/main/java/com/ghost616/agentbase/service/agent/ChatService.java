@@ -20,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
-import com.ghost616.agentbase.service.agent.invoker.HookData;
+import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
 import com.ghost616.agentbase.service.agent.log.AgentLog;
 import com.ghost616.agentbase.service.agent.log.ErrorLogData;
@@ -174,8 +174,8 @@ public class ChatService {
             throw new AgentException(AgentErrorCode.MODEL_NOT_FOUND);
         }
 
-        hookManager.triggerSessionHooks(sessionId, HookPhase.SESSION_START, context, new HookData((ChatChunk) null));
-        hookManager.triggerHooks(HookPhase.SESSION_START, context, new HookData((ChatChunk) null));
+        hookManager.triggerSessionHooks(sessionId, HookPhase.SESSION_START, context, new ChatChunkHookData((ChatChunk) null));
+        hookManager.triggerHooks(HookPhase.SESSION_START, context, new ChatChunkHookData((ChatChunk) null));
 
         String requestType = configData.requestType();
         addLog(RouteLogData.builder()
@@ -715,9 +715,9 @@ public class ChatService {
                                     .hasToolCalls(hasToolCalls.get())
                                     .build());
                         }
-                        hookManager.triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
-                        hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
-                        hookManager.executePostHooks(context, new HookData(chunk));
+                        hookManager.triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new ChatChunkHookData(chunk));
+                        hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new ChatChunkHookData(chunk));
+                        hookManager.executePostHooks(context, new ChatChunkHookData(chunk));
                     } finally {
                         if (threadVariableWrapper != null) {
                             threadVariableWrapper.clear();
@@ -735,9 +735,9 @@ public class ChatService {
                         ChatChunk completeChunk = ChatChunk.builder()
                                 .hasToolCalls(hasToolCalls.get())
                                 .build();
-                        hookManager.triggerSessionHooks(sessionId, HookPhase.AFTER_MESSAGE_RECEIVE, context, new HookData(completeChunk));
-                        hookManager.triggerHooks(HookPhase.AFTER_MESSAGE_RECEIVE, context, new HookData(completeChunk));
-                        hookManager.executePostHooks(context, new HookData(completeChunk));
+                        hookManager.triggerSessionHooks(sessionId, HookPhase.AFTER_MESSAGE_RECEIVE, context, new ChatChunkHookData(completeChunk));
+                        hookManager.triggerHooks(HookPhase.AFTER_MESSAGE_RECEIVE, context, new ChatChunkHookData(completeChunk));
+                        hookManager.executePostHooks(context, new ChatChunkHookData(completeChunk));
                     } finally {
                         if (threadVariableWrapper != null) {
                             threadVariableWrapper.clear();

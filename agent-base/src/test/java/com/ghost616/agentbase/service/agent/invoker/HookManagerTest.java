@@ -12,6 +12,7 @@ import org.mockito.quality.Strictness;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -39,6 +40,43 @@ class HookManagerTest {
     private AgentComponentRegistry registry;
     @Mock
     private ChatDataProvider chatDataProvider;
+
+    /** 真实实现：数据载体类型为 ChatChunkHookData 的普通 HOOK */
+    static class ChunkRegularHook implements HookInvoker<ChatChunkHookData, EmptyHookResult> {
+        boolean executed;
+        EmptyHookResult result = EmptyHookResult.INSTANCE;
+
+        @Override
+        public HookPhase getPhase() {
+            return HookPhase.BEFORE_MESSAGE_SEND;
+        }
+
+        @Override
+        public EmptyHookResult execute(AgentExecutionContext context, ChatChunkHookData data) {
+            executed = true;
+            return result;
+        }
+    }
+
+    /** 真实实现：数据载体类型为 ToolHookContext 的系统 HOOK */
+    static class ToolSystemHook implements SystemHook<ToolHookContext, EmptyHookResult> {
+        boolean executed;
+
+        @Override
+        public HookPhase getPhase() {
+            return HookPhase.BEFORE_MESSAGE_SEND;
+        }
+
+        @Override
+        public EmptyHookResult execute(AgentExecutionContext context, ToolHookContext data) {
+            executed = true;
+            return EmptyHookResult.INSTANCE;
+        }
+    }
+
+    /** 测试用自定义结果类型 */
+    static class FakeResult implements HookResult {
+    }
 
     @BeforeEach
     void setUp() {
@@ -241,5 +279,114 @@ class HookManagerTest {
         hookManager.triggerSessionHooks("1", HookPhase.BEFORE_MESSAGE_SEND, ctx, data);
         verify(regularHook1).execute(ctx, data);
         verify(postHook1, never()).execute(any(), any());
+    }
+
+    // ==================== 数据载体匹配与结果收集 ====================
+
+    @Test
+    void triggerHooks_数据载体类型不匹配时跳过执行() {
+        ChunkRegularHook hook = new ChunkRegularHook();
+        when(chatDataProvider.getHooks()).thenReturn(List.of(hook));
+        hookManager.refreshHooks();
+
+        List<HookResult> results = hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, ctx, new ToolHookContext());
+
+        assertFalse(hook.executed);
+        assertTrue(results.isEmpty());
+    }
+
+    @Test
+    void triggerHooks_数据载体类型匹配时执行并收集结果() {
+        ChunkRegularHook hook = new ChunkRegularHook();
+        when(chatDataProvider.getHooks()).thenReturn(List.of(hook));
+        hookManager.refreshHooks();
+
+        List<HookResult> results = hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, ctx, new ChatChunkHookData(null));
+
+        assertTrue(hook.executed);
+        assertEquals(1, results.size());
+        assertSame(EmptyHookResult.INSTANCE, results.get(0));
+    }
+
+    @Test
+    void triggerHooks_返回null的结果不收集() {
+        ChunkRegularHook hook = new ChunkRegularHook();
+        hook.result = null;
+        when(chatDataProvider.getHooks()).thenReturn(List.of(hook));
+        hookManager.refreshHooks();
+
+        List<HookResult> results = hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, ctx, new ChatChunkHookData(null));
+
+        assertTrue(hook.executed);
+        assertTrue(results.isEmpty());
+    }
+
+    @Test
+    void triggerHooks_系统hook数据载体不匹配时跳过执行() {
+        ToolSystemHook hook = new ToolSystemHook();
+        when(chatDataProvider.getHooks()).thenReturn(List.of(hook));
+        hookManager.refreshHooks();
+
+        List<HookResult> results = hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, ctx, new ChatChunkHookData(null));
+
+        assertFalse(hook.executed);
+        assertTrue(results.isEmpty());
+    }
+
+    @Test
+    void triggerHooks_系统hook数据载体匹配时执行() {
+        ToolSystemHook hook = new ToolSystemHook();
+        when(chatDataProvider.getHooks()).thenReturn(List.of(hook));
+        hookManager.refreshHooks();
+
+        List<HookResult> results = hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, ctx, new ToolHookContext());
+
+        assertTrue(hook.executed);
+        assertEquals(1, results.size());
+    }
+
+    @Test
+    void triggerSessionHooks_数据载体不匹配时跳过会话hook() {
+        ChunkRegularHook hook = new ChunkRegularHook();
+        when(chatDataProvider.getHooks("1")).thenReturn(List.of(hook));
+
+        List<HookResult> results = hookManager.triggerSessionHooks("1", HookPhase.BEFORE_MESSAGE_SEND, ctx, new ToolHookContext());
+
+        assertFalse(hook.executed);
+        assertTrue(results.isEmpty());
+    }
+
+    @Test
+    void executePostHooks_数据载体不匹配时跳过后置hook() {
+        ChunkRegularHook hook = new ChunkRegularHook();
+        when(chatDataProvider.getHooks()).thenReturn(List.of(hook));
+        hookManager.refreshHooks();
+
+        List<HookResult> results = hookManager.executePostHooks(ctx, new ToolHookContext());
+
+        assertFalse(hook.executed);
+        assertTrue(results.isEmpty());
+    }
+
+    // ==================== castHookResult ====================
+
+    @Test
+    void castHookResult_类型匹配返回转换结果() {
+        assertSame(EmptyHookResult.INSTANCE, hookManager.castHookResult(EmptyHookResult.INSTANCE, EmptyHookResult.class));
+    }
+
+    @Test
+    void castHookResult_result为null返回null() {
+        assertNull(hookManager.castHookResult(null, EmptyHookResult.class));
+    }
+
+    @Test
+    void castHookResult_clazz为null返回null() {
+        assertNull(hookManager.castHookResult(EmptyHookResult.INSTANCE, null));
+    }
+
+    @Test
+    void castHookResult_类型不匹配返回null() {
+        assertNull(hookManager.castHookResult(new FakeResult(), EmptyHookResult.class));
     }
 }

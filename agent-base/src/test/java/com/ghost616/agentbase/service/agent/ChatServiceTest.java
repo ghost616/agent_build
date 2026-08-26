@@ -11,7 +11,7 @@ import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolInfo;
 import com.ghost616.agentbase.enums.FinishReason;
 import com.ghost616.agentbase.enums.HookPhase;
-import com.ghost616.agentbase.service.agent.invoker.HookData;
+import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
 import com.ghost616.agentbase.service.agent.invoker.SystemToolManager;
 import com.ghost616.agentbase.service.agent.invoker.ToolManager;
@@ -103,8 +103,8 @@ class ChatServiceTest {
 
         chatService.chat(request);
 
-        verify(hookManager).triggerSessionHooks(sessionId, HookPhase.SESSION_START, context, new HookData((com.ghost616.agentbase.dto.model.ChatChunk) null));
-        verify(hookManager).triggerHooks(HookPhase.SESSION_START, context, new HookData((com.ghost616.agentbase.dto.model.ChatChunk) null));
+        verify(hookManager).triggerSessionHooks(sessionId, HookPhase.SESSION_START, context, new ChatChunkHookData((com.ghost616.agentbase.dto.model.ChatChunk) null));
+        verify(hookManager).triggerHooks(HookPhase.SESSION_START, context, new ChatChunkHookData((com.ghost616.agentbase.dto.model.ChatChunk) null));
     }
 
     @Test
@@ -160,8 +160,8 @@ class ChatServiceTest {
 
         chatService.chat(request).subscribe();
 
-        verify(hookManager).triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
-        verify(hookManager).triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
+        verify(hookManager).triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new ChatChunkHookData(chunk));
+        verify(hookManager).triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new ChatChunkHookData(chunk));
     }
 
     @Test
@@ -188,8 +188,8 @@ class ChatServiceTest {
         chatService.chat(request).subscribe();
 
         com.ghost616.agentbase.dto.model.ChatChunk completeChunk = com.ghost616.agentbase.dto.model.ChatChunk.builder().hasToolCalls(false).build();
-        verify(hookManager).triggerSessionHooks(sessionId, HookPhase.AFTER_MESSAGE_RECEIVE, context, new HookData(completeChunk));
-        verify(hookManager).triggerHooks(HookPhase.AFTER_MESSAGE_RECEIVE, context, new HookData(completeChunk));
+        verify(hookManager).triggerSessionHooks(sessionId, HookPhase.AFTER_MESSAGE_RECEIVE, context, new ChatChunkHookData(completeChunk));
+        verify(hookManager).triggerHooks(HookPhase.AFTER_MESSAGE_RECEIVE, context, new ChatChunkHookData(completeChunk));
     }
 
     private com.ghost616.agentbase.dto.model.ChatRequest executeFoldChat(
@@ -486,8 +486,8 @@ class ChatServiceTest {
 
         assertDoesNotThrow(() -> chatService.chat(request).subscribe());
 
-        verify(hookManager).triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
-        verify(hookManager).triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
+        verify(hookManager).triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new ChatChunkHookData(chunk));
+        verify(hookManager).triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new ChatChunkHookData(chunk));
     }
 
     @Test

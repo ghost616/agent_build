@@ -35,15 +35,15 @@ chatDataCacheManager 字段（@Setter）与 getChatDataCacheManager() getter 已
     },
 ## HookInvoker / SystemHook / SystemPostHook
 
-
+HookInvoker<D extends HookData<R>, R extends HookResult> 泛型执行契约接口，定义 getPhase() 与 R execute(AgentExecutionContext, D data)（execute 返回结果类型 R，D 为数据载体类型、R 为结果类型）。SystemHook<D, R> 泛型透传 extends HookInvoker<D, R>，新增 getIndex() 默认方法（执行顺序索引，数值越小越早执行）；SystemPostHook<D, R> 泛型透传继承 SystemHook，为系统后置 HOOK 标记接口，被 HookManager.refreshHooks() 识别加入 systemPostHooks 列表，在每次触发 HOOK 时最后执行。
 ## HookManager
 
-HookManager 抽取自 ChatService/ToolExecutionService 的公共 HOOK 管理基础设施。内部持有 AgentComponentRegistry registry 字段、systemHooks / systemPostHooks / regularPhaseHooks 三个集合。构造函数注入 AgentComponentRegistry，提供 refreshHooks() 无参方法（内部通过 registry.getChatDataProvider().getHooks() 获取 HookInvoker 列表后按类型分类）、triggerHooks(HookPhase, AgentExecutionContext, HookData) 触发全局阶段钩子、triggerSessionHooks(String sessionId, HookPhase, AgentExecutionContext, HookData) 通过 ChatDataProvider.getHooks(sessionId) 加载会话专属 HOOK 并按 phase 匹配执行、executePostHooks(AgentExecutionContext, HookData) 触发后置钩子共四个方法。
-triggerHooks / triggerSessionHooks / executePostHooks 中每个 h.execute(ctx, data) 调用均包裹 try-catch，异常时以 WARN 级别日志记录失败信息（含 hook 类名），继续执行后续 hook，不中断整体流程。
-triggerSessionHooks 按与 triggerHooks 相同的 phase 匹配逻辑：普通 HOOK 直接执行，SystemHook 按 index 排序后执行，SystemPostHook 跳过（归 executePostHooks 处理）。
+HookManager 抽取自 ChatService/ToolExecutionService 的公共 HOOK 管理基础设施。内部持有 AgentComponentRegistry registry 字段、systemHooks / systemPostHooks / regularPhaseHooks 三个缓存（类型为 Map<HookPhase, List<HookInvokerWrapper>> 与 List<HookInvokerWrapper>，包装类构造时经 HookDataMatcher 预解析数据载体类型）。构造函数注入 AgentComponentRegistry，提供 refreshHooks() 无参方法（内部通过 registry.getChatDataProvider().getHooks() 获取原始 HookInvoker 列表，包装为 HookInvokerWrapper 后按类型分类）、triggerHooks(HookPhase, AgentExecutionContext, HookData<?>) 触发全局阶段钩子、triggerSessionHooks(String sessionId, HookPhase, AgentExecutionContext, HookData<?>) 通过 ChatDataProvider.getHooks(sessionId) 加载会话专属 HOOK 并按 phase 匹配执行、executePostHooks(AgentExecutionContext, HookData<?>) 触发后置钩子共四个方法，触发方法统一返回 List<HookResult>。执行前先 supports 判断（包装类按 dataType.isInstance 匹配，dataType 为 null 放行；会话 HOOK 经 HookDataMatcher.matches），不匹配或返回 null 的结果跳过收集；每个 execute 调用均包裹 try-catch，异常时以 WARN 级别日志记录失败信息（含 hook 类名），继续执行后续 hook，不中断整体流程。triggerSessionHooks 按与 triggerHooks 相同的 phase 匹配逻辑：普通 HOOK 直接执行，SystemHook 按 index 排序后执行，SystemPostHook 跳过（归 executePostHooks 处理）。另提供泛型方法 <T extends HookResult> T castHookResult(HookResult result, Class<T> clazz)，内部用 clazz.isInstance 判断，result/clazz 为 null 或类型不匹配返回 null。
 ## HookData
 
-HookData 数据载体类，包含 ChatChunk chatChunk 和 ToolHookContext toolContext 两个 final 不可变字段。提供两个独立构造器：HookData(ChatChunk) 和 HookData(ToolHookContext)，分别设置对应字段。无 setter，创建后不可修改。由 @Getter @ToString @EqualsAndHashCode 生成访问方法与对象方法。
+HookData<R extends HookResult> 泛型数据载体接口（无方法体），泛型参数 R 为数据载体对应的结果类型。实现类：ChatChunkHookData（封装 ChatChunk 字段并暴露 getChatChunk()，替代原 new HookData(ChatChunk) 用法）与 ToolHookContext（工具调用上下文，实现 HookData<EmptyHookResult>，保留 @Data/@AllArgsConstructor/@NoArgsConstructor）。原 HookData 具体类（含 chatChunk/toolContext 两个 final 字段与两个构造器）已拆分为上述两个实现类。
+
+HOOK 结果契约与包装匹配基础设施：HookResult 接口（静态 empty() 返回 EmptyHookResult.INSTANCE）；EmptyHookResult 空实现（final 单例、构造私有）；HookDataMatcher 工具类（final 类、私有构造）通过反射沿继承链与接口递归解析 HookInvoker 实现类泛型参数 D（支持类型变量映射），静态 resolveDataType(HookInvoker) 无法解析返回 null，matches(hook, data) 在 dataType 为 null 时放行；HookInvokerWrapper 包装类构造时经 HookDataMatcher.resolveDataType 预解析 dataType 缓存，提供 getPhase/getIndex（委托 SystemHook）/supports（dataType 为 null 放行）/execute（内部 unchecked 强转委托执行），供 HookManager 缓存与匹配使用。
 ## HookInvoker
 execute 方法签名由 execute(AgentExecutionContext, ChatChunk) 改为 execute(AgentExecutionContext, HookData)，调用方通过 new HookData(chunk) 包装 ChatChunk 传入。
 
@@ -54,6 +54,7 @@ execute 方法签名由 execute(AgentExecutionContext, ChatChunk) 改为 execute
 - finishReason=stop 分支中，ctx.getLastResponseId() 非空时调用 contextDataProvider.updateLastResponseId(sessionId, lastResponseId) 持久化会话最近响应 ID（仅当非空才写入）
 - SessionBuffer 新增 List&lt;ChatChunk.WebSearchCall&gt; webSearchCalls 和 List&lt;ChatChunk.CustomToolCall&gt; customToolCalls 两个累积字段；非 stop 分支中 chunk.getWebSearchCall()/getCustomToolCall() 非空时累积到对应列表
 - finishReason=stop 分支中将累积列表整体通过 toWebSearchCallData/toCustomToolCallData 私有方法转为 List&lt;MessageDataProvider.WebSearchCallData&gt;/List&lt;MessageDataProvider.CustomToolCallData&gt;，经 .webSearchCall()/.customToolCall() 链传入 messageSave，并将累积列表（空时传 Collections.emptyList()）传入 HistoryEntry 构造器
+适配 HOOK 机制泛型化：implements SystemPostHook<ChatChunkHookData, EmptyHookResult>，execute 参数由 HookData 改为 ChatChunkHookData（经 getChatChunk() 提取 ChatChunk），返回类型改为 EmptyHookResult（无结果返回 null 或 HookResult.empty()）。
 ## ToolExecutionTracker
 
 非 Spring 组件（已去掉 @Component），保留 @Slf4j。构造函数改为接收 AgentComponentRegistry，通过 registry.getToolExecutionProvider() 获取 ToolExecutionProvider，所有 Map 操作（setExecuting/setDone/setFailed/clear/getCurrentExecution/getAndClearResults）委派给 provider。内部 record ToolExecutionStatus（status/toolId/toolName/arguments）和 ToolResult（toolId/toolName/arguments/result）保持不变。

@@ -12,7 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.ghost616.agentbase.dto.model.ChatChunk;
 import com.ghost616.agentbase.enums.HookPhase;
 import com.ghost616.agentbase.service.agent.AgentExecutionContext;
-import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
+import com.ghost616.agentbase.service.agent.invoker.HookData;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,7 +51,7 @@ class SubSessionResultFallbackHookTest {
     void execute_非子会话_静默跳过() {
         when(ctx.isMainSession()).thenReturn(true);
 
-        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+        hook.execute(ctx, new HookData(completeChunkNoTools()));
 
         verify(resultProvider, never()).shouldSendResultToParent(anyString());
         verify(ctx, never()).sendParentMessage(anyString());
@@ -62,7 +62,7 @@ class SubSessionResultFallbackHookTest {
         when(ctx.isMainSession()).thenReturn(false);
         ChatChunk chunk = ChatChunk.builder().hasToolCalls(true).build();
 
-        hook.execute(ctx, new ChatChunkHookData(chunk));
+        hook.execute(ctx, new HookData(chunk));
 
         verify(resultProvider, never()).shouldSendResultToParent(anyString());
         verify(ctx, never()).sendParentMessage(anyString());
@@ -76,7 +76,7 @@ class SubSessionResultFallbackHookTest {
         when(ctx.getHistory()).thenReturn(List.of(assistantMessage("最终回复")));
 
         // ChatService.doOnComplete 构造的 completeChunk 仅含 hasToolCalls、无 finishReason
-        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+        hook.execute(ctx, new HookData(completeChunkNoTools()));
 
         verify(ctx).sendParentMessage("最终回复");
     }
@@ -87,7 +87,7 @@ class SubSessionResultFallbackHookTest {
         when(ctx.getSessionId()).thenReturn("child-1");
         when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(false);
 
-        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+        hook.execute(ctx, new HookData(completeChunkNoTools()));
 
         verify(ctx, never()).sendParentMessage(anyString());
     }
@@ -103,7 +103,7 @@ class SubSessionResultFallbackHookTest {
                 userMessage("追问"),
                 assistantMessage("最终回复")));
 
-        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+        hook.execute(ctx, new HookData(completeChunkNoTools()));
 
         verify(ctx).sendParentMessage("最终回复");
     }
@@ -115,7 +115,7 @@ class SubSessionResultFallbackHookTest {
         when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
         when(ctx.getHistory()).thenReturn(List.of(userMessage("用户提问"), userMessage("追问")));
 
-        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+        hook.execute(ctx, new HookData(completeChunkNoTools()));
 
         verify(ctx, never()).sendParentMessage(anyString());
     }
@@ -127,7 +127,7 @@ class SubSessionResultFallbackHookTest {
         when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
         when(ctx.getHistory()).thenReturn(List.of());
 
-        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+        hook.execute(ctx, new HookData(completeChunkNoTools()));
 
         verify(ctx, never()).sendParentMessage(anyString());
     }
@@ -139,7 +139,7 @@ class SubSessionResultFallbackHookTest {
         when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
         when(ctx.getHistory()).thenReturn(null);
 
-        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+        hook.execute(ctx, new HookData(completeChunkNoTools()));
 
         verify(ctx, never()).sendParentMessage(anyString());
     }
@@ -151,7 +151,7 @@ class SubSessionResultFallbackHookTest {
         when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
         when(ctx.getHistory()).thenReturn(List.of(assistantMessage("  ")));
 
-        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+        hook.execute(ctx, new HookData(completeChunkNoTools()));
 
         verify(ctx, never()).sendParentMessage(anyString());
     }

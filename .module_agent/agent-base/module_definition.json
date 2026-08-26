@@ -59,19 +59,19 @@
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookInvoker.java",
-      "description": "HOOK 执行契约接口，定义 getPhase() 和 execute(AgentExecutionContext, HookData) 方法"
+      "description": "HOOK 执行契约接口（泛型化）：HookInvoker<D extends HookData<R>, R extends HookResult>，定义 getPhase() 与 R execute(AgentExecutionContext, D data) 方法，D 为数据载体类型、R 为结果类型。数据载体类型由 HookManager 经 HookDataMatcher 反射解析实现类的 D 做匹配。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemHook.java",
-      "description": "系统 HOOK 接口，扩展 HookInvoker，新增 getIndex() 默认方法"
+      "description": "系统 HOOK 接口，泛型透传 SystemHook<D extends HookData<R>, R extends HookResult> extends HookInvoker<D, R>，新增 getIndex() 默认方法（执行顺序索引，数值越小越早执行）。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemPostHook.java",
-      "description": "系统后置 HOOK 标记接口，继承 SystemHook"
+      "description": "系统后置 HOOK 标记接口，泛型透传 SystemPostHook<D extends HookData<R>, R extends HookResult> extends SystemHook<D, R>，拥有执行顺序控制能力；被 HookManager.refreshHooks() 识别加入 systemPostHooks 列表，在每次触发 HOOK 时最后执行。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/MessageSavePostHook.java",
-      "description": "消息保存后置 HOOK 实现，在 AFTER_MESSAGE_RECEIVE 阶段处理流式消息持久化。构造函数注入 AgentComponentRegistry，execute 开头惰性初始化 contextDataProvider/sessionManager/agentContextManager/toolCallQueueManager 四个字段；从 HookData 获取 ChatChunk 再提取 UsageInfo 透传到消息保存和历史记录；累积流式 webSearchCall/customToolCall（独立类 WebSearchCall/CustomToolCall）到 SessionBuffer，FinishReason.STOP 分支将累积列表整体转为 List<WebSearchCallData>/List<CustomToolCallData> 传入 messageSave 与 HistoryEntry（assistant 消息 ToolInfo 传 null、HistoryEntry 末位 images/userInput 参数传 null）；assistant 消息保存链显式设置 .userInput(false)（避免落库命中 user_input 默认值 1）；FinishReason.STOP 且 ctx.lastResponseId 非空时调用 contextDataProvider.updateLastResponseId(sessionId, lastResponseId) 持久化会话最近响应 ID。"
+      "description": "消息保存后置 HOOK 实现，在 AFTER_MESSAGE_RECEIVE 阶段处理流式消息持久化。构造函数注入 AgentComponentRegistry，execute 开头惰性初始化 contextDataProvider/sessionManager/agentContextManager/toolCallQueueManager 四个字段；从 HookData 获取 ChatChunk 再提取 UsageInfo 透传到消息保存和历史记录；累积流式 webSearchCall/customToolCall（独立类 WebSearchCall/CustomToolCall）到 SessionBuffer，FinishReason.STOP 分支将累积列表整体转为 List<WebSearchCallData>/List<CustomToolCallData> 传入 messageSave 与 HistoryEntry（assistant 消息 ToolInfo 传 null、HistoryEntry 末位 images/userInput 参数传 null）；assistant 消息保存链显式设置 .userInput(false)（避免落库命中 user_input 默认值 1）；FinishReason.STOP 且 ctx.lastResponseId 非空时调用 contextDataProvider.updateLastResponseId(sessionId, lastResponseId) 持久化会话最近响应 ID。适配 HOOK 机制泛型化：implements SystemPostHook<ChatChunkHookData, EmptyHookResult>，execute 参数改为 ChatChunkHookData（经 getChatChunk() 提取 ChatChunk），返回 EmptyHookResult（无结果返回 null）。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ToolExecutionTracker.java",
@@ -91,7 +91,7 @@
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ChatService.java",
-      "description": "ChatService 聊天服务，非 Spring 组件。构造函数接收 AgentComponentRegistry，通过 registry 延迟获取 AgentContextManager/SessionManager/ModelInvokerManager/SystemToolManager/ToolManager/ChatDataProvider。chat(ChatRequest) 为入口路由方法，基于 RequestType 三路分发：RESPONSES 走 chatViaResponses（有状态）、RESPONSES_STATELESS 走 chatViaResponsesStateless（无状态）、COMPLETIONS/null/其他 走 chatViaChatCompletions。chat() 支持 TOOL_CONTINUE_MARKER 与 SEND_USER_MESSAGE_MARKER（\"[send_user_message]\"）两个标记：content 为任一标记时不保存用户消息、不加入历史，直接触发模型执行。请求级图片：chat() 入口将 ChatRequest.images 附加到本次构建的 user 消息——messageSave().images(images) 持久化 + HistoryEntry 末位 images 字段（null/空时保持既有行为）。用户输入区分：chat() 保存用户消息时 messageSave().userInput(true) + HistoryEntry userInput=true（用户输入、评估重放、工具子会话经 chat 接口统一 true）。buildMessageFromEntry 将 HistoryEntry 的 ToolInfo toolInfo、images（非空时）与 userInput 透传到 Message 构建器；历史折叠（filterAndFold/foldMessageGroups）仅保留 content 文本忽略图片：折叠区首条 user 消息改为仅含 role+content 的副本（剥离图片），锚点 JSON 行（buildHistoryGroupMessage/toHistoryGroupJson）不含图片字段。buildContextSystemInfo 返回 ContextSystemInfo（systemMessages/filteredLoadedSkills/loadedSkillMessages 三字段），已加载技能 prompt 消息归入 loadedSkillMessages，systemMessages 仅含可用技能列表与子会话权限说明。foldMessageGroups/filterAndFold 返回 FoldResult(messages/anchorMessages)（提升 KV Cache 命中率）：分组边界为「user 角色且 user_input=true」（新增私有方法 isFoldGroupStart，Boolean.TRUE.equals(userInput) 判断），user_input=false 的 user 消息不产生新组、归入相邻组，system 前缀单独提出；foldedCount=max(0,(groups.size()-recentCount)/DEFAULT_FOLD_INTERVAL)*DEFAULT_FOLD_INTERVAL，groups<=recentCount 或 foldedCount==0 时不折叠；旧区 0..foldedCount-1 折叠为 user 首条+占位 assistant「此为历史消息索引为N，如果想要展开请调用历史消息工具」，近端区完整展开；读取 _sys_his_msgs_index 对话变量，对 <foldedCount 的索引组装【历史消息组{N}】system 锚点消息独立放入 anchorMessages（buildHistoryGroupMessage），锚点补全 assistant 推理（reasoning 行，仅 toolCalls 非空时）、tool_call 名称(参数)、tool_result 名称(id):内容。chatViaChatCompletions 最终顺序：[SYSTEM 底座prompt][SYSTEM 系统信息][折叠区+近端区][SYSTEM loadedSkills][SYSTEM 锚点][USER 当前消息]：拆包 FoldResult 后采用收集器模式注入后置消息——collectLoadedSkillMessages/collectAnchorMessages/collectPostSystemPrompt 三个收集器将已加载技能消息、锚点消息、会话级后置提示词（空白跳过）依次追加到统一 postMessages 列表，再经 insertPostSystemMessages 一次 findLastUserIndex 插入到最后一条 user 消息之前（无 user 时追加列表末尾），postMessages 为 null/空时原样返回。chatViaResponses/chatViaResponsesStateless 拆包 FoldResult 并将 anchorMessages 传入 buildInstructions（在 loadedSkillMessages 之后追加锚点内容），使 Responses 系列 instructions 也包含锚点。chatViaResponses/chatViaResponsesStateless 构建模型 ChatRequest 时通过 toolManager.getBuiltinTools(configData.id()) 设置 builtinTools。新增私有方法 addLog(LogData logData)：从 registry.getAgentLog() 获取 AgentLog，非 null 时调用 agentLog.addLog(logData)（try-catch 包裹，捕获异常以 WARN 级别记录日志，不中断主流程）；chat() 入口在 context 构建后、isToolContinue 判断后，一次 addLog 以 RequestEntryLogData.builder() 构建完整日志（.logLevel(LogLevel.INFO)、context、sessionId、modelId、content、isToolContinue）并记录。全流程智能体日志埋点：conversationId 为空抛异常前、modelId 无配置抛异常前、parseLoadedSkills/parseExpandedIndices JSON 解析异常、buildHistoryGroupMessage 序列化失败（WARN 级）记录 ErrorLogData；请求路由后记录 RouteLogData（requestType）；chatViaChatCompletions 模型调用前记录 ModelCallLogData（messageCount/toolCount/toolNames=工具名列表/thinking）；toSseStream 首次检测 tool calls、finishReason 非空、doOnCancel 时记录 StreamEventLogData（ToolCallDetected/StreamComplete/StreamCancelled）；foldMessageGroups 实际折叠时记录 HistoryExpandLogData（foldedCount/expandedMessages=锚点消息内容列表，由 buildHistoryGroupMessage 结果收集）；buildContextSystemInfo 已加载技能非空时记录 SkillLoadLogData（skillNames/skillCount）。parseExpandedIndices/buildHistoryGroupMessage 私有方法签名新增 context 参数以支持日志上下文。会话级前置/后置系统提示词注入：chatViaChatCompletions 中前置提示词（chatDataProvider.getPreSystemPrompt(sessionId)）作为 role=system 消息插入到主 systemPrompt 之后（index 1，位于系统信息之前），后置提示词（chatDataProvider.getPostSystemPrompt(sessionId)）经 collectPostSystemPrompt 收集后随统一 postMessages 由 insertPostSystemMessages 插入到最后一条 user 消息之前（无 user 时追加列表末尾）；chatViaResponses/chatViaResponsesStateless 经 buildInstructions（方法签名新增 preSystemPrompt/postSystemPrompt 两个 String 参数）将前置提示词拼入 systemPrompt 之后、后置提示词拼入 instructions 末尾（位于 loadedSkills/锚点内容之后）；提示词为 null 或空白字符串时跳过注入，异常向上传播不吞。"
+      "description": "ChatService 聊天服务，非 Spring 组件。构造函数接收 AgentComponentRegistry，通过 registry 延迟获取 AgentContextManager/SessionManager/ModelInvokerManager/SystemToolManager/ToolManager/ChatDataProvider。chat(ChatRequest) 为入口路由方法，基于 RequestType 三路分发：RESPONSES 走 chatViaResponses（有状态）、RESPONSES_STATELESS 走 chatViaResponsesStateless（无状态）、COMPLETIONS/null/其他 走 chatViaChatCompletions。chat() 支持 TOOL_CONTINUE_MARKER 与 SEND_USER_MESSAGE_MARKER（\"[send_user_message]\"）两个标记：content 为任一标记时不保存用户消息、不加入历史，直接触发模型执行。请求级图片：chat() 入口将 ChatRequest.images 附加到本次构建的 user 消息——messageSave().images(images) 持久化 + HistoryEntry 末位 images 字段（null/空时保持既有行为）。用户输入区分：chat() 保存用户消息时 messageSave().userInput(true) + HistoryEntry userInput=true（用户输入、评估重放、工具子会话经 chat 接口统一 true）。buildMessageFromEntry 将 HistoryEntry 的 ToolInfo toolInfo、images（非空时）与 userInput 透传到 Message 构建器；历史折叠（filterAndFold/foldMessageGroups）仅保留 content 文本忽略图片：折叠区首条 user 消息改为仅含 role+content 的副本（剥离图片），锚点 JSON 行（buildHistoryGroupMessage/toHistoryGroupJson）不含图片字段。buildContextSystemInfo 返回 ContextSystemInfo（systemMessages/filteredLoadedSkills/loadedSkillMessages 三字段），已加载技能 prompt 消息归入 loadedSkillMessages，systemMessages 仅含可用技能列表与子会话权限说明。foldMessageGroups/filterAndFold 返回 FoldResult(messages/anchorMessages)（提升 KV Cache 命中率）：分组边界为「user 角色且 user_input=true」（新增私有方法 isFoldGroupStart，Boolean.TRUE.equals(userInput) 判断），user_input=false 的 user 消息不产生新组、归入相邻组，system 前缀单独提出；foldedCount=max(0,(groups.size()-recentCount)/DEFAULT_FOLD_INTERVAL)*DEFAULT_FOLD_INTERVAL，groups<=recentCount 或 foldedCount==0 时不折叠；旧区 0..foldedCount-1 折叠为 user 首条+占位 assistant「此为历史消息索引为N，如果想要展开请调用历史消息工具」，近端区完整展开；读取 _sys_his_msgs_index 对话变量，对 <foldedCount 的索引组装【历史消息组{N}】system 锚点消息独立放入 anchorMessages（buildHistoryGroupMessage），锚点补全 assistant 推理（reasoning 行，仅 toolCalls 非空时）、tool_call 名称(参数)、tool_result 名称(id):内容。chatViaChatCompletions 最终顺序：[SYSTEM 底座prompt][SYSTEM 系统信息][折叠区+近端区][SYSTEM loadedSkills][SYSTEM 锚点][USER 当前消息]：拆包 FoldResult 后采用收集器模式注入后置消息——collectLoadedSkillMessages/collectAnchorMessages/collectPostSystemPrompt 三个收集器将已加载技能消息、锚点消息、会话级后置提示词（空白跳过）依次追加到统一 postMessages 列表，再经 insertPostSystemMessages 一次 findLastUserIndex 插入到最后一条 user 消息之前（无 user 时追加列表末尾），postMessages 为 null/空时原样返回。chatViaResponses/chatViaResponsesStateless 拆包 FoldResult 并将 anchorMessages 传入 buildInstructions（在 loadedSkillMessages 之后追加锚点内容），使 Responses 系列 instructions 也包含锚点。chatViaResponses/chatViaResponsesStateless 构建模型 ChatRequest 时通过 toolManager.getBuiltinTools(configData.id()) 设置 builtinTools。新增私有方法 addLog(LogData logData)：从 registry.getAgentLog() 获取 AgentLog，非 null 时调用 agentLog.addLog(logData)（try-catch 包裹，捕获异常以 WARN 级别记录日志，不中断主流程）；chat() 入口在 context 构建后、isToolContinue 判断后，一次 addLog 以 RequestEntryLogData.builder() 构建完整日志（.logLevel(LogLevel.INFO)、context、sessionId、modelId、content、isToolContinue）并记录。全流程智能体日志埋点：conversationId 为空抛异常前、modelId 无配置抛异常前、parseLoadedSkills/parseExpandedIndices JSON 解析异常、buildHistoryGroupMessage 序列化失败（WARN 级）记录 ErrorLogData；请求路由后记录 RouteLogData（requestType）；chatViaChatCompletions 模型调用前记录 ModelCallLogData（messageCount/toolCount/toolNames=工具名列表/thinking）；toSseStream 首次检测 tool calls、finishReason 非空、doOnCancel 时记录 StreamEventLogData（ToolCallDetected/StreamComplete/StreamCancelled）；foldMessageGroups 实际折叠时记录 HistoryExpandLogData（foldedCount/expandedMessages=锚点消息内容列表，由 buildHistoryGroupMessage 结果收集）；buildContextSystemInfo 已加载技能非空时记录 SkillLoadLogData（skillNames/skillCount）。parseExpandedIndices/buildHistoryGroupMessage 私有方法签名新增 context 参数以支持日志上下文。会话级前置/后置系统提示词注入：chatViaChatCompletions 中前置提示词（chatDataProvider.getPreSystemPrompt(sessionId)）作为 role=system 消息插入到主 systemPrompt 之后（index 1，位于系统信息之前），后置提示词（chatDataProvider.getPostSystemPrompt(sessionId)）经 collectPostSystemPrompt 收集后随统一 postMessages 由 insertPostSystemMessages 插入到最后一条 user 消息之前（无 user 时追加列表末尾）；chatViaResponses/chatViaResponsesStateless 经 buildInstructions（方法签名新增 preSystemPrompt/postSystemPrompt 两个 String 参数）将前置提示词拼入 systemPrompt 之后、后置提示词拼入 instructions 末尾（位于 loadedSkills/锚点内容之后）；提示词为 null 或空白字符串时跳过注入，异常向上传播不吞。HOOK 机制泛型化适配：SESSION_START/BEFORE_MESSAGE_SEND/AFTER_MESSAGE_RECEIVE 阶段及后置 HOOK 的数据载体由 new HookData(ChatChunk) 改为 new ChatChunkHookData(...)，不消费触发方法返回的 List<HookResult>，触发时机与顺序保持不变。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ContextSerializer.java",
@@ -227,7 +227,7 @@
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ToolExecutionService.java",
-      "description": "工具执行服务。持有 HookManager 实例，triggerHooks/triggerSessionHooks/executePostHooks 委托给 hookManager。提供 setHookManager(HookManager) setter 支持外部注入共享实例。移除了原有的 chatDataProvider/systemHooks/systemPostHooks/regularPhaseHooks 字段及 refreshHooks/triggerHooks/executePostHooks 方法。在 BEFORE_TOOL_CALL/AFTER_TOOL_CALL 两处 triggerHooks 调用前增加 triggerSessionHooks 调用。continueAfterTools 中保存 tool 角色消息与构造 HistoryEntry 时使用 new ToolInfo(r.toolId(), r.toolName()) 传入工具调用信息（HistoryEntry 末位 images/userInput 参数传 null）；tool 消息保存链显式设置 .userInput(false)（避免落库命中 user_input 默认值 1）。新增私有 addLog 方法与 resolveToolType 辅助方法（_sys_ 前缀→system、$ 前缀→builtin、其他→regular），executeTool 各分支记录 ToolExecuteLogData（队列为空 empty、调用器异常 failed、invoker 不存在 error、会话缺失 error、停止 empty、正常 executing，异步完成/异常各记录一条），continueAfterTools 记录 ToolContinueLogData(INFO)。executeTool 异步执行点（CompletableFuture.supplyAsync）接入线程变量传播：提交任务前通过 registry.getThreadVariableHandler() 获取 ThreadVariableHandler（未注入时为 null），非 null 时调用 wrap() 捕获 ThreadVariableWrapper 传入异步线程，异步线程开始执行时调用 apply() 恢复线程变量。"
+      "description": "工具执行服务。持有 HookManager 实例，triggerHooks/triggerSessionHooks/executePostHooks 委托给 hookManager。提供 setHookManager(HookManager) setter 支持外部注入共享实例。移除了原有的 chatDataProvider/systemHooks/systemPostHooks/regularPhaseHooks 字段及 refreshHooks/triggerHooks/executePostHooks 方法。在 BEFORE_TOOL_CALL/AFTER_TOOL_CALL 两处 triggerHooks 调用前增加 triggerSessionHooks 调用。continueAfterTools 中保存 tool 角色消息与构造 HistoryEntry 时使用 new ToolInfo(r.toolId(), r.toolName()) 传入工具调用信息（HistoryEntry 末位 images/userInput 参数传 null）；tool 消息保存链显式设置 .userInput(false)（避免落库命中 user_input 默认值 1）。新增私有 addLog 方法与 resolveToolType 辅助方法（_sys_ 前缀→system、$ 前缀→builtin、其他→regular），executeTool 各分支记录 ToolExecuteLogData（队列为空 empty、调用器异常 failed、invoker 不存在 error、会话缺失 error、停止 empty、正常 executing，异步完成/异常各记录一条），continueAfterTools 记录 ToolContinueLogData(INFO)。executeTool 异步执行点（CompletableFuture.supplyAsync）接入线程变量传播：提交任务前通过 registry.getThreadVariableHandler() 获取 ThreadVariableHandler（未注入时为 null），非 null 时调用 wrap() 捕获 ThreadVariableWrapper 传入异步线程，异步线程开始执行时调用 apply() 恢复线程变量。HOOK 机制泛型化适配：BEFORE_TOOL_CALL/AFTER_TOOL_CALL 阶段数据载体由 new HookData(new ToolHookContext(...)) 改为直接 new ToolHookContext(...)（其本身即 HookData 实现），不消费触发方法返回的 List<HookResult>。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/util/JsonMapper.java",
@@ -303,15 +303,15 @@
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookData.java",
-      "description": "HOOK 数据载体，包含 final 字段 chatChunk 和 toolContext，提供两个独立构造器按需注入，创建后不可修改"
+      "description": "HOOK 数据载体接口（泛型化）：HookData<R extends HookResult> 无方法体，泛型参数 R 为数据载体对应的结果类型。具体实现类承载各自业务字段：ChatChunkHookData 承载 ChatChunk、ToolHookContext 承载工具调用上下文。原具体类（含 chatChunk/toolContext 字段与两个构造器）已拆分为上述两个实现类。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ToolHookContext.java",
-      "description": "工具执行钩子上下文，包裹 toolCallId/toolName/arguments/result，用于 BEFORE/AFTER_TOOL_CALL 阶段数据传递"
+      "description": "工具执行钩子上下文，实现 HookData<EmptyHookResult>，包裹 toolCallId/toolName/arguments/result 字段（保留 @Data/@AllArgsConstructor/@NoArgsConstructor），用于 BEFORE/AFTER_TOOL_CALL 阶段数据传递；其本身即 HookData 实现，可直接作为触发方法入参。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookManager.java",
-      "description": "HOOK 管理基础设施，维护 systemHooks/systemPostHooks/regularPhaseHooks 三组列表，提供 refreshHooks/triggerHooks/triggerSessionHooks/executePostHooks 方法，供 ChatService 和 ToolExecutionService 委托使用"
+      "description": "HookManager 抽取自 ChatService/ToolExecutionService 的公共 HOOK 管理基础设施。内部持有 AgentComponentRegistry registry 字段、systemHooks / systemPostHooks / regularPhaseHooks 三个缓存（类型为 Map<HookPhase, List<HookInvokerWrapper>> 与 List<HookInvokerWrapper>>，包装类构造时经 HookDataMatcher 预解析数据载体类型）。构造函数注入 AgentComponentRegistry，提供 refreshHooks()（内部通过 registry.getChatDataProvider().getHooks() 获取原始 HookInvoker 列表，包装为 HookInvokerWrapper 后按类型分类）、triggerHooks(HookPhase, AgentExecutionContext, HookData<?>) 触发全局阶段钩子、triggerSessionHooks(String sessionId, HookPhase, AgentExecutionContext, HookData<?>) 通过 ChatDataProvider.getHooks(sessionId) 加载会话专属 HOOK 并按 phase 匹配执行、executePostHooks(AgentExecutionContext, HookData<?>) 触发后置钩子共四个方法，触发方法统一返回 List<HookResult>。执行前先 supports 判断（包装类按 dataType.isInstance 匹配，dataType 为 null 放行；会话 HOOK 经 HookDataMatcher.matches），不匹配或返回 null 的结果跳过收集；每个 execute 调用均包裹 try-catch，异常时以 WARN 级别日志记录失败信息，继续执行后续 hook，不中断整体流程。triggerSessionHooks 按与 triggerHooks 相同的 phase 匹配逻辑：普通 HOOK 直接执行，SystemHook 按 index 排序后执行，SystemPostHook 跳过（归 executePostHooks 处理）。另提供泛型方法 <T extends HookResult> T castHookResult(HookResult, Class<T>)，内部用 clazz.isInstance 判断，result/clazz 为 null 或类型不匹配返回 null。"
     },
     {
       "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/CustomToolInvoker.java",
@@ -668,6 +668,38 @@
     {
       "description": "ChatService 无技能加载工具场景测试（ChatServiceNoLoadSkillsTest），验证系统未注册 _sys_load_skills 工具时跳过技能提示消息；本次为兼容 ChatService.chat() 新增 messageSave().images() 链式调用补充 MessageSaveBuilder mock stub（lenient().when(msgBuilder.images(any())).thenReturn(msgBuilder)）。",
       "path": "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceNoLoadSkillsTest.java"
+    },
+    {
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookResult.java",
+      "description": "HOOK 执行结果接口，定义 HookInvoker.execute 的返回值契约；含静态方法 empty() 返回 EmptyHookResult.INSTANCE。"
+    },
+    {
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/EmptyHookResult.java",
+      "description": "空 HOOK 结果实现（final 单例，构造私有），通过 INSTANCE 或 HookResult.empty() 获取，用于无结果返回场景。"
+    },
+    {
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ChatChunkHookData.java",
+      "description": "ChatChunk 数据载体（实现 HookData<EmptyHookResult>），封装 final ChatChunk 字段并暴露 getChatChunk()，替代原 new HookData(ChatChunk) 用法。"
+    },
+    {
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookDataMatcher.java",
+      "description": "HOOK 数据载体类型解析与匹配工具类（final 类、私有构造）：通过反射沿继承链与接口递归解析 HookInvoker 实现类泛型参数 D（支持类型变量映射），提供静态 resolveDataType(HookInvoker)（无法解析返回 null）与 matches(hook, data)（dataType 为 null 时放行）方法。"
+    },
+    {
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookInvokerWrapper.java",
+      "description": "HookInvoker 包装类：构造时经 HookDataMatcher.resolveDataType 预解析 dataType 缓存，提供 getPhase()/getIndex()（委托 SystemHook）/supports(HookData<?>)（dataType 为 null 放行）/execute(ctx, data)（内部 unchecked 强转委托执行），供 HookManager 缓存与匹配使用。"
+    },
+    {
+      "path": "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookManagerTest.java",
+      "description": "HookManager 单元测试：覆盖普通/系统/后置三类 HOOK 的触发与按 index 排序、异常隔离不中断、会话级 HOOK 触发（SystemPostHook 跳过）、数据载体类型匹配（不匹配跳过/匹配执行并收集结果/返回 null 不收集）、castHookResult 转换（匹配/null 参数/类型不匹配）等场景。"
+    },
+    {
+      "path": "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookDataMatcherTest.java",
+      "description": "HookDataMatcher 单元测试：覆盖直接实现 HookInvoker、经 SystemHook/SystemPostHook 中间接口实现、泛型父类继承链类型变量映射、中间接口间接实现、原始类型使用（解析为 null）的类型解析，以及 matches 匹配/不匹配/无法解析放行/参数为 null 场景。"
+    },
+    {
+      "path": "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookInvokerWrapperTest.java",
+      "description": "HookInvokerWrapper 单元测试：覆盖 getPhase/getIndex 委托（系统 HOOK 与非系统 HOOK）、supports 匹配/不匹配/dataType 为 null 放行、execute 委托原始 Hook 执行并透传结果（含返回 null 场景）。"
     }
   ]
 }

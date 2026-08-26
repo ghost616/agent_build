@@ -26,7 +26,7 @@ import com.ghost616.agentbase.service.agent.SessionManager;
 
 
 @Slf4j
-public class MessageSavePostHook implements SystemPostHook {
+public class MessageSavePostHook implements SystemPostHook<ChatChunkHookData, EmptyHookResult> {
 
     private final AgentComponentRegistry registry;
     private ContextDataProvider contextDataProvider;
@@ -75,18 +75,18 @@ public class MessageSavePostHook implements SystemPostHook {
     }
 
     @Override
-    public void execute(AgentExecutionContext ctx, HookData data) {
+    public EmptyHookResult execute(AgentExecutionContext ctx, ChatChunkHookData data) {
         ensureInitialized();
-        ChatChunk chunk = data.getChatChunk();
+        ChatChunk chunk = data != null ? data.getChatChunk() : null;
         if (chunk == null) {
-            return;
+            return null;
         }
         String sessionId = ctx.getSessionId();
 
         if (FinishReason.STOP.equals(chunk.getFinishReason())) {
             SessionBuffer sb = buffers.remove(sessionId);
             if (sb == null) {
-                return;
+                return null;
             }
             String content = sb.contentBuffer.toString();
             String reasoning = sb.reasoningBuffer.length() > 0 ? sb.reasoningBuffer.toString() : null;
@@ -139,7 +139,7 @@ public class MessageSavePostHook implements SystemPostHook {
                             sb.webSearchCalls.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(sb.webSearchCalls),
                             sb.customToolCalls.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(sb.customToolCalls),
                             null, null));
-            return;
+            return EmptyHookResult.INSTANCE;
         }
 
         SessionBuffer sb = buffers.computeIfAbsent(sessionId, k -> new SessionBuffer());
@@ -188,6 +188,7 @@ public class MessageSavePostHook implements SystemPostHook {
                 }
             }
         }
+        return EmptyHookResult.INSTANCE;
     }
 
     private MessageDataProvider.WebSearchCallData toWebSearchCallData(WebSearchCall call) {

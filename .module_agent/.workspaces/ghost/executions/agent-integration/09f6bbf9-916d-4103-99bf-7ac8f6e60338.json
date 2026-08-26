@@ -1,0 +1,12 @@
+[
+  {
+    "plan_id": "plan_29205a30-713b-493d-b3a2-e2536887131d",
+    "plan": "HOOK 泛型化签名适配",
+    "modified_files": [
+      "agent-integration/src/main/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHook.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHookTest.java"
+    ],
+    "summary": "执行总结：本轮共修改 2 个文件，完成 HOOK 泛型化签名适配——1) SubSessionResultFallbackHook.java：implements SystemHook<ChatChunkHookData, EmptyHookResult>，execute 参数由 HookData 改为 ChatChunkHookData、返回类型由 void 改为 EmptyHookResult（静默跳过分支返回 null，正常回传完成返回 EmptyHookResult.INSTANCE），data.getChatChunk() 读取逻辑保持不变；2) SubSessionResultFallbackHookTest.java：import HookData 改为 ChatChunkHookData，10 处 new HookData(...) 构造迁移为 new ChatChunkHookData(...)。AgentAssemblerTest.java 仅使用原始类型 HookInvoker mock（mock(HookInvoker.class)/List.of(mockHook)），泛型化后仍可编译，未改动。\n测试总结：全部测试通过，通过 815 项（agent-base 581 + agent-integration 234），失败 0 项，跳过 0 项。mvn -pl agent-integration -am clean test BUILD SUCCESS，编译通过（主代码+测试代码）；重点验证 SubSessionResultFallbackHookTest 11/11（getPhase/getIndex 元数据、非子会话跳过、hasToolCalls=true 跳过、doOnComplete 完整 chunk 继续执行、Provider 判定无需发送跳过、需要时取最后一条 assistant 消息回传、history 无 assistant/空/null/空白跳过）与 AgentAssemblerTest 26/26 全部通过；离朱报告确认无环境问题、无失败用例，日志中 ERROR 均为测试用例主动构造的预期异常路径。",
+    "errors": []
+  }
+]

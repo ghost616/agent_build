@@ -10,7 +10,7 @@ import com.ghost616.agentbase.enums.HookPhase;
 import com.ghost616.agentbase.enums.LogLevel;
 import com.ghost616.agentbase.enums.LogType;
 import com.ghost616.agentbase.service.agent.invoker.BuiltinToolInvoker;
-import com.ghost616.agentbase.service.agent.invoker.HookData;
+import com.ghost616.agentbase.service.agent.invoker.ToolHookContext;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
 import com.ghost616.agentbase.service.agent.invoker.SystemTool;
 import com.ghost616.agentbase.service.agent.invoker.SystemToolManager;
@@ -103,9 +103,9 @@ class ToolExecutionServiceTest {
 
         toolExecutionService.executeTool(sessionId);
 
-        verify(mockHookManager).triggerSessionHooks(eq(sessionId), eq(HookPhase.BEFORE_TOOL_CALL), eq(context), any(HookData.class));
-        verify(mockHookManager).triggerHooks(eq(HookPhase.BEFORE_TOOL_CALL), eq(context), any(HookData.class));
-        verify(mockHookManager, atLeastOnce()).executePostHooks(eq(context), any(HookData.class));
+        verify(mockHookManager).triggerSessionHooks(eq(sessionId), eq(HookPhase.BEFORE_TOOL_CALL), eq(context), any(ToolHookContext.class));
+        verify(mockHookManager).triggerHooks(eq(HookPhase.BEFORE_TOOL_CALL), eq(context), any(ToolHookContext.class));
+        verify(mockHookManager, atLeastOnce()).executePostHooks(eq(context), any(ToolHookContext.class));
     }
 
     // ========== executeTool ==========

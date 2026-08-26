@@ -12,7 +12,7 @@ import com.ghost616.agentbase.dto.tool.ToolConfigDTO;
 import com.ghost616.agentbase.enums.FinishReason;
 import com.ghost616.agentbase.enums.HookPhase;
 import com.ghost616.agentbase.enums.RequestType;
-import com.ghost616.agentbase.service.agent.invoker.HookData;
+import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
 import com.ghost616.agentbase.service.agent.invoker.HistoryQuerySystemTool;
 import com.ghost616.agentbase.service.agent.invoker.LoadSkillsSystemTool;
@@ -273,14 +273,14 @@ class ChatServiceResponsesTest {
         executeChat(apiRequest, harness, RequestType.RESPONSES.getCode(), Flux.just(chunk));
 
         verify(hookManager).triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND,
-                harness.context, new HookData(chunk));
-        verify(hookManager).triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, harness.context, new HookData(chunk));
+                harness.context, new ChatChunkHookData(chunk));
+        verify(hookManager).triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, harness.context, new ChatChunkHookData(chunk));
 
         ChatChunk completeChunk = ChatChunk.builder().hasToolCalls(false).build();
         verify(hookManager).triggerSessionHooks(sessionId, HookPhase.AFTER_MESSAGE_RECEIVE,
-                harness.context, new HookData(completeChunk));
+                harness.context, new ChatChunkHookData(completeChunk));
         verify(hookManager).triggerHooks(HookPhase.AFTER_MESSAGE_RECEIVE, harness.context,
-                new HookData(completeChunk));
+                new ChatChunkHookData(completeChunk));
     }
 
     @Test
