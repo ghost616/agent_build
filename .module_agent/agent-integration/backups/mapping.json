@@ -58,5 +58,6 @@
   "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/AnthropicInvokerTest.java": "2633c02534e2524fb0e4d2778d89833b",
   "agent-integration/src/test/java/com/ghost616/agentinteg/model/invoker/KimiInvokerTest.java": "b5d6e299a1f16ba16e10b4a9da0c04a5",
   "agent-integration/src/main/java/com/ghost616/agentinteg/tool/SubSessionCallbackTool.java": "390b3c11b8d521852f42c658b889619f",
-  "agent-integration/src/test/java/com/ghost616/agentinteg/tool/SubSessionCallbackToolTest.java": "b68e7becfb4cc894630ba78831f53cfa"
+  "agent-integration/src/test/java/com/ghost616/agentinteg/tool/SubSessionCallbackToolTest.java": "b68e7becfb4cc894630ba78831f53cfa",
+  "agent-integration/src/main/java/com/ghost616/agentinteg/subsession/SubSessionResultProvider.java": "75a4c48f3a8117dc287f7002f11f61b0"
 }

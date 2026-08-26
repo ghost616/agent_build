@@ -198,16 +198,16 @@
       "description": "HistoryQueryTool 单元测试，覆盖 createToolConfig（CUSTOM 类型、工具名、参数 schema）、execute 正常路径（seqs/includeReasoning 透传、reasoning 按需返回、toolCalls/toolResult 序列化）、includeReasoning 默认 false 不返回 reasoning、无匹配消息返回空列表、provider 返回 null 返回空列表、缺少/空/含非整数 seqs 的错误场景、无法获取会话 ID、provider 异常场景。"
     },
     {
-      "path": "agent-integration/src/main/java/com/ghost616/agentinteg/subsession/SubSessionResultProvider.java",
-      "description": "子会话结果回传 Provider 接口（integration 侧契约定义，由 platform-app 实现）。定义 shouldSendResultToParent(String sessionId) 方法，用于判断指定子会话是否需要向父会话兜底回传执行结果；实现方综合判定会话是否为子会话、所属主会话的子会话打开方式（如 WEBSOCKET）及结果是否已通过其他通道回传等条件。"
+      "path": "agent-integration/src/main/java/com/ghost616/agentinteg/hook/SubSessionResultProvider.java",
+      "description": "子会话结果回传 Provider 接口（由 platform-app 提供实现）。定义 shouldSendResultToParent(String sessionId) 判断指定子会话是否需要向父会话兜底回传执行结果（综合判定会话是否确为子会话、子会话打开方式如 WEBSOCKET、结果是否已通过其他通道回传等）。"
     },
     {
-      "path": "agent-integration/src/main/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHook.java",
-      "description": "子会话结果兜底回传 HOOK（implements SystemHook，即 HookInvoker，由 HookManager.triggerHooks(phase) 按 phase 分发）。getPhase 返回 AFTER_MESSAGE_RECEIVE（该阶段仅在 ChatService 流式响应 doOnComplete 结束时触发一次，completeChunk 仅含 hasToolCalls 字段、无 finishReason），getIndex=100 保证在 MessageSavePostHook 之后执行（history 已含本次最终 assistant 消息）。execute()：仅子会话（非 isMainSession）继续；chunk.hasToolCalls 为 true 时跳过（工具调用轮，最终回复尚未完成）；不依赖 FinishReason.STOP 判定（completeChunk 无 finishReason）；经 SubSessionResultProvider.shouldSendResultToParent(sessionId) 判定，需要时取 ctx.getHistory() 最后一条 assistant 消息 content，通过 ctx.sendParentMessage(content) 回传父会话（复用既有 sendParentMessage 通道）；非子会话、有工具调用、Provider 判定无需发送、无 assistant 内容等情况一律静默跳过（debug 日志），不影响原有流程。"
+      "path": "agent-integration/src/main/java/com/ghost616/agentinteg/hook/SubSessionResultFallbackHook.java",
+      "description": "子会话结果兜底回传 HOOK，implements SystemHook<ChatChunkHookData, EmptyHookResult>（适配 agent-base HookInvoker<D, R> 泛型化改造）。getPhase 返回 AFTER_MESSAGE_RECEIVE，getIndex=100 确保在 MessageSavePostHook 之后执行；execute(AgentExecutionContext, ChatChunkHookData) 返回 EmptyHookResult（跳过分支返回 null，正常回传完成返回 EmptyHookResult.INSTANCE），仅在子会话且最终回复无待执行工具调用（hasToolCalls 非 true）时经 SubSessionResultProvider 判定需要后，取 ctx.getHistory() 最后一条 assistant 消息 content 通过 ctx.sendParentMessage(content) 回传父会话，其余情况静默跳过。"
     },
     {
-      "path": "agent-integration/src/test/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHookTest.java",
-      "description": "SubSessionResultFallbackHook 单元测试（JUnit5 + Mockito）。覆盖 getPhase 返回 AFTER_MESSAGE_RECEIVE、getIndex 大于 0 的元数据断言；execute 行为用例：非子会话跳过、hasToolCalls=true 跳过、doOnComplete 完整 chunk（仅含 hasToolCalls=false、无 finishReason）继续执行兜底回传、Provider 判定无需发送跳过、Provider 判定需要时取最后一条 assistant 消息经 sendParentMessage 回传、history 无 assistant 消息/为空/null/内容空白时跳过。测试统一使用 completeChunkNoTools() 辅助方法构造 ChatChunk.builder().hasToolCalls(false).build()（与 ChatService.doOnComplete 构造的 completeChunk 一致，无 finishReason 依赖）。"
+      "path": "agent-integration/src/test/java/com/ghost616/agentinteg/hook/SubSessionResultFallbackHookTest.java",
+      "description": "SubSessionResultFallbackHook 单元测试（JUnit 5 + Mockito），11 个用例覆盖 getPhase/getIndex 元数据、非子会话跳过、data 为 null/chunk 为 null 跳过、hasToolCalls=true 跳过、doOnComplete 完整 chunk 仅含 hasToolCalls 字段继续执行、Provider 判定无需发送跳过、需要发送时取最后一条 assistant 消息回传、history 无 assistant/为空/null/内容空白跳过；使用 new ChatChunkHookData(...) 构造数据载体。"
     }
   ]
 }

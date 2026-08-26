@@ -32,9 +32,17 @@
     "test_passed": true
   },
   {
-    "plan_id": "plan_f019f52d-7323-431e-b94b-8f4a5c34c366",
-    "plan_summary": "triggerSessionHooks 类型缓存优化（class→dataType 缓存）",
-    "starter_session_id": "session-7a6078f1-5d0e-47fe-955a-ca507a1beffa",
+    "plan_id": "plan_223acc11-aaf2-4d0f-9485-7869d0aad14e",
+    "plan_summary": "包重命名 com.ghost616.agentinteg.subsession → com.ghost616.agentinteg.hook（3 文件迁移 + import 引用修改 + 测试验证）",
+    "starter_session_id": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_673ba3f4-b746-4ded-bf78-ca1917905d0f",
+    "plan_summary": "适配 agent-integration 包重命名后的 import 引用（3 文件改 import + 全局确认无残留 + 编译测试）",
+    "starter_session_id": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true

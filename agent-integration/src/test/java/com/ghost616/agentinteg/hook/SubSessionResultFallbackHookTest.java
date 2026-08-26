@@ -1,0 +1,174 @@
+package com.ghost616.agentinteg.hook;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import com.ghost616.agentbase.dto.model.ChatChunk;
+import com.ghost616.agentbase.enums.HookPhase;
+import com.ghost616.agentbase.service.agent.AgentExecutionContext;
+import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
+
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class SubSessionResultFallbackHookTest {
+
+    @Mock
+    private AgentExecutionContext ctx;
+
+    @Mock
+    private SubSessionResultProvider resultProvider;
+
+    private SubSessionResultFallbackHook hook;
+
+    @BeforeEach
+    void setUp() {
+        hook = new SubSessionResultFallbackHook(resultProvider);
+    }
+
+    @Test
+    void getPhase_返回AFTER_MESSAGE_RECEIVE() {
+        assertSame(HookPhase.AFTER_MESSAGE_RECEIVE, hook.getPhase());
+    }
+
+    @Test
+    void getIndex_大于消息保存HOOK默认索引() {
+        assertTrue(hook.getIndex() > 0);
+    }
+
+    @Test
+    void execute_非子会话_静默跳过() {
+        when(ctx.isMainSession()).thenReturn(true);
+
+        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+
+        verify(resultProvider, never()).shouldSendResultToParent(anyString());
+        verify(ctx, never()).sendParentMessage(anyString());
+    }
+
+    @Test
+    void execute_已有待执行工具调用_跳过() {
+        when(ctx.isMainSession()).thenReturn(false);
+        ChatChunk chunk = ChatChunk.builder().hasToolCalls(true).build();
+
+        hook.execute(ctx, new ChatChunkHookData(chunk));
+
+        verify(resultProvider, never()).shouldSendResultToParent(anyString());
+        verify(ctx, never()).sendParentMessage(anyString());
+    }
+
+    @Test
+    void execute_doOnComplete完整chunk仅含hasToolCalls字段_继续执行() {
+        when(ctx.isMainSession()).thenReturn(false);
+        when(ctx.getSessionId()).thenReturn("child-1");
+        when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
+        when(ctx.getHistory()).thenReturn(List.of(assistantMessage("最终回复")));
+
+        // ChatService.doOnComplete 构造的 completeChunk 仅含 hasToolCalls、无 finishReason
+        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+
+        verify(ctx).sendParentMessage("最终回复");
+    }
+
+    @Test
+    void execute_provider判定无需发送_跳过() {
+        when(ctx.isMainSession()).thenReturn(false);
+        when(ctx.getSessionId()).thenReturn("child-1");
+        when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(false);
+
+        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+
+        verify(ctx, never()).sendParentMessage(anyString());
+    }
+
+    @Test
+    void execute_provider判定需要发送_取最后一条assistant消息回传() {
+        when(ctx.isMainSession()).thenReturn(false);
+        when(ctx.getSessionId()).thenReturn("child-1");
+        when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
+        when(ctx.getHistory()).thenReturn(List.of(
+                userMessage("用户提问"),
+                assistantMessage("第一轮回复"),
+                userMessage("追问"),
+                assistantMessage("最终回复")));
+
+        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+
+        verify(ctx).sendParentMessage("最终回复");
+    }
+
+    @Test
+    void execute_history无assistant消息_跳过() {
+        when(ctx.isMainSession()).thenReturn(false);
+        when(ctx.getSessionId()).thenReturn("child-1");
+        when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
+        when(ctx.getHistory()).thenReturn(List.of(userMessage("用户提问"), userMessage("追问")));
+
+        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+
+        verify(ctx, never()).sendParentMessage(anyString());
+    }
+
+    @Test
+    void execute_history为空_跳过() {
+        when(ctx.isMainSession()).thenReturn(false);
+        when(ctx.getSessionId()).thenReturn("child-1");
+        when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
+        when(ctx.getHistory()).thenReturn(List.of());
+
+        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+
+        verify(ctx, never()).sendParentMessage(anyString());
+    }
+
+    @Test
+    void execute_history为null_跳过() {
+        when(ctx.isMainSession()).thenReturn(false);
+        when(ctx.getSessionId()).thenReturn("child-1");
+        when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
+        when(ctx.getHistory()).thenReturn(null);
+
+        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+
+        verify(ctx, never()).sendParentMessage(anyString());
+    }
+
+    @Test
+    void execute_assistant消息内容为空白_跳过() {
+        when(ctx.isMainSession()).thenReturn(false);
+        when(ctx.getSessionId()).thenReturn("child-1");
+        when(resultProvider.shouldSendResultToParent("child-1")).thenReturn(true);
+        when(ctx.getHistory()).thenReturn(List.of(assistantMessage("  ")));
+
+        hook.execute(ctx, new ChatChunkHookData(completeChunkNoTools()));
+
+        verify(ctx, never()).sendParentMessage(anyString());
+    }
+
+    private ChatChunk completeChunkNoTools() {
+        return ChatChunk.builder().hasToolCalls(false).build();
+    }
+
+    private AgentExecutionContext.HistoryEntry assistantMessage(String content) {
+        return new AgentExecutionContext.HistoryEntry(
+                "assistant", content, null, null, LocalDateTime.now(),
+                List.of(), null, List.of(), List.of(), null, null);
+    }
+
+    private AgentExecutionContext.HistoryEntry userMessage(String content) {
+        return new AgentExecutionContext.HistoryEntry(
+                "user", content, null, null, LocalDateTime.now(),
+                List.of(), null, List.of(), List.of(), null, null);
+    }
+}

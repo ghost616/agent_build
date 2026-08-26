@@ -1,0 +1,11 @@
+{
+  "plan_id": "plan_223acc11-aaf2-4d0f-9485-7869d0aad14e",
+  "module_name": "agent-integration",
+  "development_plan": "包重命名：com.ghost616.agentinteg.subsession → com.ghost616.agentinteg.hook（纯重命名，无行为变化）：\n1. 将以下 3 个文件的物理路径从 subsession 目录迁移至 hook 目录，并同步修改文件内 package 声明为 com.ghost616.agentinteg.hook：\n   - agent-integration/src/main/java/com/ghost616/agentinteg/subsession/SubSessionResultProvider.java → .../agentinteg/hook/SubSessionResultProvider.java\n   - agent-integration/src/main/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHook.java → .../agentinteg/hook/SubSessionResultFallbackHook.java\n   - agent-integration/src/test/java/com/ghost616/agentinteg/subsession/SubSessionResultFallbackHookTest.java → .../agentinteg/hook/SubSessionResultFallbackHookTest.java\n2. 检查并修改 agent-integration 模块内其他文件对本包（com.ghost616.agentinteg.subsession）的所有 import 引用为新包名。\n3. 删除空的 subsession 目录。\n4. 运行 agent-integration 模块 Maven 编译与全部测试，确保编译通过且全部测试通过（注意跨模块编译依赖 platform-app 尚未适配时的兼容：若 -am 方式拉入 platform-app 编译失败，可先仅编译 agent-integration 自身或说明依赖顺序，由 platform-app 计划随后适配）。",
+  "session_id": "09f6bbf9-916d-4103-99bf-7ac8f6e60338",
+  "modified_files": [
+    "agent-integration/src/main/java/com/ghost616/agentinteg/hook/SubSessionResultProvider.java",
+    "agent-integration/src/main/java/com/ghost616/agentinteg/hook/SubSessionResultFallbackHook.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/hook/SubSessionResultFallbackHookTest.java"
+  ]
+}
