@@ -1,0 +1,10 @@
+{
+  "plan_id": "plan_f019f52d-7323-431e-b94b-8f4a5c34c366",
+  "module_name": "agent-base",
+  "development_plan": "优化 HookManager.triggerSessionHooks 的类型匹配逻辑，避免每次执行时反射解析泛型参数：\\n1. HookManager 新增实例字段 Map<Class<?>, Class<?>> hookDataTypeCache（ConcurrentHashMap 实现），以 HookInvoker 实现类为键、其数据载体类型（泛型参数 D）的 Class 为值。\\n2. 新增私有方法 resolveDataTypeCached(HookInvoker)：通过 computeIfAbsent 实现缓存——首次对某 HookInvoker 类调用 HookDataMatcher.resolveDataType 反射解析并缓存，后续同 class 直接命中缓存返回（无法解析返回 null）。\\n3. 重构 triggerSessionHooks：将原有对每个 hook 调用 HookDataMatcher.matches(hook, data) 的逻辑改为通过 resolveDataTypeCached 获取期望类型后用 expectedType.isInstance(data) 做 O(1) 判断；保持现有执行语义完全不变（阶段过滤、SystemPostHook 跳过、SystemHook 收集后按 index 升序执行、类型不匹配跳过、返回 null 跳过收集、执行异常记录 WARN 日志不中断）。\\n4. 测试适配：HookManagerTest 新增会话级 HOOK 类型缓存相关用例——同一 class 的多个 hook 实例仅解析一次（可用自定义 HookInvoker 实现类验证）、不同 class 分别缓存、类型不匹配时跳过执行、无法解析类型时放行。\\n5. 运行 agent-base 模块 Maven 编译与全部测试，确保编译通过且全部测试（含新增用例）通过。\\n涉及文件：agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookManager.java、agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookManagerTest.java。",
+  "session_id": "93f19a7f-4acf-483d-b357-fafd67162efd",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookManager.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookManagerTest.java"
+  ]
+}

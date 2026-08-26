@@ -10,9 +10,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
-import java.lang.reflect.Field;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -71,22 +69,6 @@ class HookManagerTest {
 
         @Override
         public EmptyHookResult execute(AgentExecutionContext context, ToolHookContext data) {
-            executed = true;
-            return EmptyHookResult.INSTANCE;
-        }
-    }
-
-    /** 原始类型（无泛型信息）实现：数据载体类型无法解析，应放行执行 */
-    static class RawHook implements HookInvoker {
-        boolean executed;
-
-        @Override
-        public HookPhase getPhase() {
-            return HookPhase.BEFORE_MESSAGE_SEND;
-        }
-
-        @Override
-        public EmptyHookResult execute(AgentExecutionContext context, HookData data) {
             executed = true;
             return EmptyHookResult.INSTANCE;
         }
@@ -297,77 +279,6 @@ class HookManagerTest {
         hookManager.triggerSessionHooks("1", HookPhase.BEFORE_MESSAGE_SEND, ctx, data);
         verify(regularHook1).execute(ctx, data);
         verify(postHook1, never()).execute(any(), any());
-    }
-
-    // ==================== 会话级 HOOK 类型缓存 ====================
-
-    @Test
-    void triggerSessionHooks_同一class多实例仅解析一次() throws Exception {
-        ChunkRegularHook hook1 = new ChunkRegularHook();
-        ChunkRegularHook hook2 = new ChunkRegularHook();
-        when(chatDataProvider.getHooks("1")).thenReturn(List.of(hook1, hook2));
-
-        List<HookResult> results = hookManager.triggerSessionHooks("1", HookPhase.BEFORE_MESSAGE_SEND, ctx, new ChatChunkHookData(null));
-
-        assertTrue(hook1.executed);
-        assertTrue(hook2.executed);
-        assertEquals(2, results.size());
-        // 同一实现类仅缓存一个条目，证明类型仅解析一次
-        Map<Class<?>, Class<?>> cache = hookDataTypeCache();
-        assertEquals(1, cache.size());
-        assertEquals(ChatChunkHookData.class, cache.get(ChunkRegularHook.class));
-    }
-
-    @Test
-    void triggerSessionHooks_不同class分别缓存() throws Exception {
-        ChunkRegularHook chunkHook = new ChunkRegularHook();
-        ToolSystemHook toolHook = new ToolSystemHook();
-        when(chatDataProvider.getHooks("1")).thenReturn(List.of(chunkHook, toolHook));
-
-        // toolHook 数据载体为 ToolHookContext，与 ChatChunkHookData 不匹配，跳过执行
-        List<HookResult> results = hookManager.triggerSessionHooks("1", HookPhase.BEFORE_MESSAGE_SEND, ctx, new ChatChunkHookData(null));
-
-        assertTrue(chunkHook.executed);
-        assertFalse(toolHook.executed);
-        assertEquals(1, results.size());
-        Map<Class<?>, Class<?>> cache = hookDataTypeCache();
-        assertEquals(2, cache.size());
-        assertEquals(ChatChunkHookData.class, cache.get(ChunkRegularHook.class));
-        assertEquals(ToolHookContext.class, cache.get(ToolSystemHook.class));
-    }
-
-    @Test
-    void triggerSessionHooks_类型不匹配时跳过执行() throws Exception {
-        ChunkRegularHook hook = new ChunkRegularHook();
-        when(chatDataProvider.getHooks("1")).thenReturn(List.of(hook));
-
-        List<HookResult> results = hookManager.triggerSessionHooks("1", HookPhase.BEFORE_MESSAGE_SEND, ctx, new ToolHookContext());
-
-        assertFalse(hook.executed);
-        assertTrue(results.isEmpty());
-        Map<Class<?>, Class<?>> cache = hookDataTypeCache();
-        assertEquals(1, cache.size());
-        assertEquals(ChatChunkHookData.class, cache.get(ChunkRegularHook.class));
-    }
-
-    @Test
-    void triggerSessionHooks_无法解析类型时放行() throws Exception {
-        RawHook hook = new RawHook();
-        when(chatDataProvider.getHooks("1")).thenReturn(List.of(hook));
-
-        List<HookResult> results = hookManager.triggerSessionHooks("1", HookPhase.BEFORE_MESSAGE_SEND, ctx, new ChatChunkHookData(null));
-
-        assertTrue(hook.executed);
-        assertEquals(1, results.size());
-        // 无法解析时 computeIfAbsent 不缓存 null 映射，缓存保持为空
-        assertTrue(hookDataTypeCache().isEmpty());
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<Class<?>, Class<?>> hookDataTypeCache() throws Exception {
-        Field field = HookManager.class.getDeclaredField("hookDataTypeCache");
-        field.setAccessible(true);
-        return (Map<Class<?>, Class<?>>) field.get(hookManager);
     }
 
     // ==================== 数据载体匹配与结果收集 ====================

@@ -32,17 +32,9 @@
     "test_passed": true
   },
   {
-    "plan_id": "plan_9d2a4ee9-5ad4-4a93-ba6f-2940a6c23e82",
-    "plan_summary": "HOOK 机制基础设施改造：HookResult 返回值 + HookData 泛型接口化 + HookInvokerWrapper 包装类缓存 + HookDataMatcher 反射解析",
-    "starter_session_id": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
-    "code_reviewed": true,
-    "plan_completed": true,
-    "test_passed": true
-  },
-  {
-    "plan_id": "plan_29205a30-713b-493d-b3a2-e2536887131d",
-    "plan_summary": "HOOK 泛型化签名适配：SubSessionResultFallbackHook 适配 SystemHook<ChatChunkHookData, EmptyHookResult> 及相关测试迁移",
-    "starter_session_id": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
+    "plan_id": "plan_f019f52d-7323-431e-b94b-8f4a5c34c366",
+    "plan_summary": "triggerSessionHooks 类型缓存优化（class→dataType 缓存）",
+    "starter_session_id": "session-7a6078f1-5d0e-47fe-955a-ca507a1beffa",
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true

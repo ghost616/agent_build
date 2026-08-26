@@ -5,7 +5,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,10 +20,7 @@ import com.ghost616.agentbase.service.agent.AgentExecutionContext;
  * {@link HookInvokerWrapper} 包装），提供全局阶段触发、会话级触发与后置触发。
  * 触发方法统一返回 {@link List}{@code <HookResult>}：执行前先按数据载体类型匹配
  * （{@link HookInvokerWrapper#supports}），不匹配或返回 null 的结果跳过收集，
- * 执行异常记录 WARN 日志并跳过，不中断整体流程。会话级触发
- * （{@link #triggerSessionHooks}）的数据载体类型按 HOOK 实现类缓存
- * （{@code hookDataTypeCache}，{@link ConcurrentHashMap}），避免每次执行时
- * 反射解析泛型参数。</p>
+ * 执行异常记录 WARN 日志并跳过，不中断整体流程。</p>
  *
  * @author ghost616
  */
@@ -36,8 +32,6 @@ public class HookManager {
     private final Map<HookPhase, List<HookInvokerWrapper>> systemHooks = new HashMap<>();
     private final List<HookInvokerWrapper> systemPostHooks = new ArrayList<>();
     private final Map<HookPhase, List<HookInvokerWrapper>> regularPhaseHooks = new HashMap<>();
-    /** 会话级 HOOK 数据载体类型缓存：键为 HookInvoker 实现类，值为其泛型参数 D 的 Class（无法解析不缓存） */
-    private final Map<Class<?>, Class<?>> hookDataTypeCache = new ConcurrentHashMap<>();
 
     public HookManager(AgentComponentRegistry registry) {
         this.registry = registry;
@@ -138,55 +132,31 @@ public class HookManager {
                 sessionSystemHooks.add(hook);
                 continue;
             }
-            executeSessionHook(results, hook, ctx, data);
+            try {
+                if (HookDataMatcher.matches(hook, data)) {
+                    HookResult result = hook.execute(ctx, data);
+                    if (result != null) {
+                        results.add(result);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Session hook execution failed for {}", hook.getClass().getName(), e);
+            }
         }
         sessionSystemHooks.sort(Comparator.comparingInt(h -> ((SystemHook) h).getIndex()));
         for (HookInvoker hook : sessionSystemHooks) {
-            executeSessionHook(results, hook, ctx, data);
+            try {
+                if (HookDataMatcher.matches(hook, data)) {
+                    HookResult result = hook.execute(ctx, data);
+                    if (result != null) {
+                        results.add(result);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Session hook execution failed for {}", hook.getClass().getName(), e);
+            }
         }
         return results;
-    }
-
-    /**
-     * 执行单个会话 HOOK：经 {@link #resolveDataTypeCached} 获取期望的数据载体类型后，
-     * 用 {@code isInstance} 做 O(1) 匹配判断（类型无法解析时放行），匹配且返回非空
-     * 结果时收集；执行异常记录 WARN 日志并跳过，不中断整体流程。
-     *
-     * @param results 结果收集列表
-     * @param hook    会话 HOOK
-     * @param ctx     智能体执行上下文
-     * @param data    数据载体
-     */
-    @SuppressWarnings("unchecked")
-    private void executeSessionHook(List<HookResult> results, HookInvoker<?, ?> hook, AgentExecutionContext ctx, HookData<?> data) {
-        try {
-            Class<?> expectedType = resolveDataTypeCached(hook);
-            if (expectedType != null && !expectedType.isInstance(data)) {
-                return;
-            }
-            HookResult result = ((HookInvoker) hook).execute(ctx, data);
-            if (result != null) {
-                results.add(result);
-            }
-        } catch (Exception e) {
-            log.warn("Session hook execution failed for {}", hook.getClass().getName(), e);
-        }
-    }
-
-    /**
-     * 解析 HOOK 实现类的数据载体类型（泛型参数 D），按实现类缓存。
-     *
-     * <p>首次对某实现类调用时经 {@link HookDataMatcher#resolveDataType} 反射解析并缓存，
-     * 后续同 class 的 HOOK 直接命中缓存返回；无法解析（含 hook 为 null）返回 null。</p>
-     *
-     * @param hook HOOK 调用器，可为 null
-     * @return 数据载体类型；无法解析时返回 null
-     */
-    private Class<?> resolveDataTypeCached(HookInvoker<?, ?> hook) {
-        if (hook == null) {
-            return null;
-        }
-        return hookDataTypeCache.computeIfAbsent(hook.getClass(), key -> HookDataMatcher.resolveDataType(hook));
     }
 
     /**
