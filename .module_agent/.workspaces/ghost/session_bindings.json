@@ -6,8 +6,7 @@
     "56042935-d179-4d6f-8717-667e01fd66f9": "3090d8e8-22ae-401f-a372-7a3e328c8213",
     "27186f3a-67f7-4071-855c-4cf1330b98e1": "021c464f-eda3-42c6-9e5f-a413bfba5f2d",
     "session-820487d5-72d4-4a5d-b089-d57eba5fd2a5": "d8619af7-e2ec-48bf-8a60-2fc0b40715ba",
-    "e32df826-c59d-4f26-84ce-8dd91439ba5c": "cecbd649-eb4b-4810-9330-46e19c067b66",
-    "session-7a6078f1-5d0e-47fe-955a-ca507a1beffa": "b82fc71f-3934-41b2-828c-4d4a0f3c0fb6"
+    "54371bc7-e32f-4291-8663-86cd992f101e": "f97f7f02-13c2-46c7-93d0-56b68c2a2ee1"
   },
   "limu": {
     "a832ea5d-5c17-4533-b3ed-6c9d439ef856": "session-440d442d-dd8a-427b-b22f-a06bb882fca5",
@@ -26,10 +25,8 @@
     "4960ad8b-1f61-41de-b4ad-ae20b961df0f": "27186f3a-67f7-4071-855c-4cf1330b98e1",
     "5c1170df-6617-4212-ba96-616a6eccdf94": "session-820487d5-72d4-4a5d-b089-d57eba5fd2a5",
     "903c1c58-7772-47c1-abea-d3ac0e24bb32": "27186f3a-67f7-4071-855c-4cf1330b98e1",
-    "7f3990c0-9bec-4c6d-83b8-a39f10aec380": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
-    "09f6bbf9-916d-4103-99bf-7ac8f6e60338": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
-    "93f19a7f-4acf-483d-b357-fafd67162efd": "session-7a6078f1-5d0e-47fe-955a-ca507a1beffa",
-    "bb92fa6f-5051-402d-8f7f-2634dc6f09ef": "e32df826-c59d-4f26-84ce-8dd91439ba5c"
+    "ac47d987-feed-4f47-9765-19e25c560893": "54371bc7-e32f-4291-8663-86cd992f101e",
+    "c20b77f7-a1a1-44e7-8468-bfb57c031fbd": "54371bc7-e32f-4291-8663-86cd992f101e"
   },
   "lizhu": {},
   "lizhu_fengzhou": {
@@ -49,15 +46,13 @@
     "7d9824d3-efe4-4bb6-9f12-74b64df82bc7": "27186f3a-67f7-4071-855c-4cf1330b98e1",
     "62a1c485-25d5-4890-ac6c-1e3918faea92": "session-820487d5-72d4-4a5d-b089-d57eba5fd2a5",
     "07f901f0-1598-499d-9476-6857ceb989d3": "27186f3a-67f7-4071-855c-4cf1330b98e1",
-    "fd6bb69f-e9a9-4d42-b03d-c8ade2def230": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
-    "7e9bbd5a-5b0c-45b8-aeab-3084b0326e13": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
-    "402da29d-96f7-4ab2-b687-53d2596c83b6": "session-7a6078f1-5d0e-47fe-955a-ca507a1beffa",
-    "9de01b43-de8a-4b0a-93ca-6753529511fd": "e32df826-c59d-4f26-84ce-8dd91439ba5c"
+    "a73cd5b6-6126-4b2d-bcb1-40c89d15cd8c": "54371bc7-e32f-4291-8663-86cd992f101e",
+    "15069026-fafd-4d7d-9406-757b6d48b476": "54371bc7-e32f-4291-8663-86cd992f101e"
   },
   "kui": {
     "session-886aa2f4-b3eb-4813-afde-bcc4d7cbf279": "6feaff69-6399-486e-9348-d7c354e018f2",
     "session-cbd1ed98-519d-47de-b1cf-ac005137dc70": "56042935-d179-4d6f-8717-667e01fd66f9",
     "session-820487d5-72d4-4a5d-b089-d57eba5fd2a5": "27186f3a-67f7-4071-855c-4cf1330b98e1",
-    "session-7a6078f1-5d0e-47fe-955a-ca507a1beffa": "e32df826-c59d-4f26-84ce-8dd91439ba5c"
+    "session-7a6078f1-5d0e-47fe-955a-ca507a1beffa": "54371bc7-e32f-4291-8663-86cd992f101e"
   }
 }

@@ -95,6 +95,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -122,6 +123,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -149,6 +151,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -175,6 +178,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -202,6 +206,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(history);
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(context.getRecentMessageCount()).thenReturn(recentCount);
         lenient().when(context.getConversationVariable(any())).thenReturn(expandedIndicesJson);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
@@ -444,6 +449,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -471,6 +477,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -501,6 +508,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -530,6 +538,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -562,6 +571,7 @@ class ChatServiceTest {
         when(context.getHistory()).thenReturn(List.of(userEntry));
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
         when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
@@ -652,53 +662,5 @@ class ChatServiceTest {
         assertTrue(contents.contains("u10"), "近端区应保留真实用户输入消息");
         assertTrue(contents.contains("child-10"), "近端区应保留 user_input=false 的 user 消息");
         assertTrue(contents.contains("hello"), "近端区应保留最后一条用户输入");
-    }
-
-    /**
-     * 以指定 sessionCtx 执行一次 chat 请求（复用同一会话上下文，用于验证 preSystemPrompt 缓存）。
-     */
-    private void executeChatWithSessionCtx(AgentContextManager.AgentSessionContext sessionCtx) {
-        ChatRequest request = ChatRequest.builder().sessionId(sessionId).content("hello").conversationId("conv-1").build();
-        when(agentContextManager.build(sessionId)).thenReturn(builder);
-        when(builder.modelIdOverride(any())).thenReturn(builder);
-        when(builder.build()).thenReturn(sessionCtx);
-        when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
-        when(context.getSystemPrompt()).thenReturn("base_prompt");
-        when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
-        when(context.getTools()).thenReturn(java.util.Collections.emptyList());
-        when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
-        when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
-        when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
-        when(modelInvoker.invokeStream(any())).thenReturn(Flux.empty());
-        chatService.chat(request);
-    }
-
-    @Test
-    void chatCompletions_preSystemPrompt首次获取后缓存_二次请求不再调用provider() {
-        when(chatDataProvider.getPreSystemPrompt(sessionId)).thenReturn("PRE_PROMPT");
-
-        AgentContextManager.AgentSessionContext sessionCtx =
-                new AgentContextManager.AgentSessionContext(context, mutator, new java.util.concurrent.atomic.AtomicBoolean(false));
-
-        executeChatWithSessionCtx(sessionCtx);
-        assertEquals("PRE_PROMPT", sessionCtx.preSystemPrompt(), "首次请求后应缓存前置提示词到会话上下文");
-        executeChatWithSessionCtx(sessionCtx);
-
-        verify(chatDataProvider, times(1)).getPreSystemPrompt(sessionId);
-    }
-
-    @Test
-    void chatCompletions_provider返回null时不缓存_每次请求均调用provider() {
-        when(chatDataProvider.getPreSystemPrompt(sessionId)).thenReturn(null);
-
-        AgentContextManager.AgentSessionContext sessionCtx =
-                new AgentContextManager.AgentSessionContext(context, mutator, new java.util.concurrent.atomic.AtomicBoolean(false));
-
-        executeChatWithSessionCtx(sessionCtx);
-        assertNull(sessionCtx.preSystemPrompt(), "provider 返回 null 时缓存值应为 null");
-        executeChatWithSessionCtx(sessionCtx);
-
-        verify(chatDataProvider, times(2)).getPreSystemPrompt(sessionId);
     }
 }

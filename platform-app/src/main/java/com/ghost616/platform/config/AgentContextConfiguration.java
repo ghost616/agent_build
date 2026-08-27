@@ -20,8 +20,10 @@ import com.ghost616.agentinteg.AgentAssembler;
 import com.ghost616.agentinteg.model.invoker.DefaultModelInvokerFactory;
 import com.ghost616.agentinteg.hook.SubSessionResultFallbackHook;
 import com.ghost616.agentinteg.hook.SubSessionResultProvider;
+import com.ghost616.platform.repository.AgentSkillMapper;
 import com.ghost616.platform.repository.ModelConfigMapper;
 import com.ghost616.platform.repository.SessionMapper;
+import com.ghost616.platform.repository.SkillConfigMapper;
 import com.ghost616.platform.service.agent.DatabaseAgentLog;
 import com.ghost616.platform.service.agent.DefaultChatDataCacheProvider;
 import com.ghost616.platform.service.agent.DefaultChatDataProvider;
@@ -66,9 +68,12 @@ public class AgentContextConfiguration {
             ModelConfigMapper modelConfigMapper,
             SessionMapper sessionMapper,
             ApplicationContext applicationContext,
-            SubSessionWebSocketModeResolver subSessionWebSocketModeResolver) {
+            SubSessionWebSocketModeResolver subSessionWebSocketModeResolver,
+            ToolDataProvider toolDataProvider,
+            AgentSkillMapper agentSkillMapper,
+            SkillConfigMapper skillConfigMapper) {
         return new DefaultChatDataProvider(modelConfigMapper, sessionMapper, applicationContext,
-                subSessionWebSocketModeResolver);
+                subSessionWebSocketModeResolver, toolDataProvider, agentSkillMapper, skillConfigMapper);
     }
 
     @Bean

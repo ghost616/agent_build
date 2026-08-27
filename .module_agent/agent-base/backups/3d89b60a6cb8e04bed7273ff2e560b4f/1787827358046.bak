@@ -742,7 +742,6 @@ public class AgentContextManager {
         private volatile AgentExecutionContext context;
         private volatile AgentExecutionContext.AgentContextMutator mutator;
         private final AtomicBoolean toolInvoking;
-        private volatile String preSystemPrompt;
 
         /**
          * 轻量构建构造器：仅承载防御性拷贝后的 AgentContextData，context 为 null（懒构建）。
@@ -809,25 +808,6 @@ public class AgentContextManager {
 
         public AtomicBoolean toolInvoking() {
             return toolInvoking;
-        }
-
-        /**
-         * 会话级前置系统提示词缓存（由 ChatService 首次获取后写入，后续请求直接命中缓存，
-         * 避免重复调用 ChatDataProvider.getPreSystemPrompt）。
-         *
-         * @return 已缓存的前置提示词；尚未缓存时为 null
-         */
-        public String preSystemPrompt() {
-            return preSystemPrompt;
-        }
-
-        /**
-         * 设置会话级前置系统提示词缓存。
-         *
-         * @param preSystemPrompt 前置提示词内容（可为 null）
-         */
-        public void setPreSystemPrompt(String preSystemPrompt) {
-            this.preSystemPrompt = preSystemPrompt;
         }
     }
 }

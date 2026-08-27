@@ -184,16 +184,17 @@ public class ChatService {
                 .requestType(requestType)
                 .build());
         if (RequestType.RESPONSES.getCode().equals(requestType)) {
-            return chatViaResponses(request, context, contextMutator, sessionId, configData);
+            return chatViaResponses(request, sessionContext, context, contextMutator, sessionId, configData);
         }
         if (RequestType.RESPONSES_STATELESS.getCode().equals(requestType)) {
-            return chatViaResponsesStateless(request, context, contextMutator, sessionId, configData);
+            return chatViaResponsesStateless(request, sessionContext, context, contextMutator, sessionId, configData);
         }
-        return chatViaChatCompletions(request, context, contextMutator, sessionId, configData);
+        return chatViaChatCompletions(request, sessionContext, context, contextMutator, sessionId, configData);
     }
 
     private Flux<ServerSentEvent<ChatChunk>> chatViaChatCompletions(
             ChatRequest request,
+            AgentContextManager.AgentSessionContext sessionCtx,
             AgentExecutionContext context,
             AgentExecutionContext.AgentContextMutator contextMutator,
             String sessionId,
@@ -204,7 +205,7 @@ public class ChatService {
                 .content(context.getSystemPrompt() != null ? context.getSystemPrompt() : "")
                 .build());
 
-        String preSystemPrompt = chatDataProvider.getPreSystemPrompt(sessionId);
+        String preSystemPrompt = getPreSystemPrompt(sessionCtx, sessionId);
         if (preSystemPrompt != null && !preSystemPrompt.isBlank()) {
             messages.add(1, Message.builder()
                     .role("system")
@@ -257,6 +258,7 @@ public class ChatService {
 
     private Flux<ServerSentEvent<ChatChunk>> chatViaResponses(
             ChatRequest request,
+            AgentContextManager.AgentSessionContext sessionCtx,
             AgentExecutionContext context,
             AgentExecutionContext.AgentContextMutator contextMutator,
             String sessionId,
@@ -269,7 +271,7 @@ public class ChatService {
         input = foldResult.messages();
 
         String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages(),
-                chatDataProvider.getPreSystemPrompt(sessionId), chatDataProvider.getPostSystemPrompt(sessionId));
+                getPreSystemPrompt(sessionCtx, sessionId), chatDataProvider.getPostSystemPrompt(sessionId));
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
@@ -296,6 +298,7 @@ public class ChatService {
 
     private Flux<ServerSentEvent<ChatChunk>> chatViaResponsesStateless(
             ChatRequest request,
+            AgentContextManager.AgentSessionContext sessionCtx,
             AgentExecutionContext context,
             AgentExecutionContext.AgentContextMutator contextMutator,
             String sessionId,
@@ -308,7 +311,7 @@ public class ChatService {
         input = foldResult.messages();
 
         String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages(),
-                chatDataProvider.getPreSystemPrompt(sessionId), chatDataProvider.getPostSystemPrompt(sessionId));
+                getPreSystemPrompt(sessionCtx, sessionId), chatDataProvider.getPostSystemPrompt(sessionId));
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
@@ -326,6 +329,21 @@ public class ChatService {
         Flux<ChatChunk> stream = invoker.invokeStream(chatRequest);
 
         return toSseStream(stream, context, contextMutator, sessionId);
+    }
+
+    /**
+     * 获取会话级前置系统提示词（带缓存）：sessionCtx.preSystemPrompt() 非 null 时直接返回缓存值；
+     * 否则调用 chatDataProvider.getPreSystemPrompt(sessionId) 获取并写入缓存后返回。
+     * 同一会话上下文多次请求复用缓存，避免重复调用数据提供者。
+     */
+    private String getPreSystemPrompt(AgentContextManager.AgentSessionContext sessionCtx, String sessionId) {
+        String cached = sessionCtx.preSystemPrompt();
+        if (cached != null) {
+            return cached;
+        }
+        String preSystemPrompt = chatDataProvider.getPreSystemPrompt(sessionId);
+        sessionCtx.setPreSystemPrompt(preSystemPrompt);
+        return preSystemPrompt;
     }
 
     private String buildInstructions(
@@ -508,80 +526,8 @@ public class ChatService {
             }
         }
 
-        if (context.isMainSession()) {
-            List<ToolConfigDTO> childOnlyTools = new ArrayList<>();
-            List<ToolConfigDTO> allAuthTools = new ArrayList<>();
-            for (ToolConfigDTO t : context.getTools()) {
-                SessionAuthType auth = t.getSessionAuth();
-                if (auth == SessionAuthType.CHILD) {
-                    childOnlyTools.add(t);
-                } else if (auth == null || auth == SessionAuthType.ALL) {
-                    allAuthTools.add(t);
-                }
-            }
-            List<SkillConfigDTO> childOnlySkills = new ArrayList<>();
-            List<SkillConfigDTO> allAuthSkills = new ArrayList<>();
-            if (skills != null) {
-                for (SkillConfigDTO s : skills) {
-                    SessionAuthType auth = s.getSessionAuth();
-                    if (auth == SessionAuthType.CHILD) {
-                        childOnlySkills.add(s);
-                    } else if (auth == null || auth == SessionAuthType.ALL) {
-                        allAuthSkills.add(s);
-                    }
-                }
-            }
-            if (!childOnlyTools.isEmpty() || !allAuthTools.isEmpty() || !childOnlySkills.isEmpty() || !allAuthSkills.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("以下为子会话相关的工具/技能权限说明。标注【仅子会话可用】的项不可在当前会话直接调用，需通过子会话使用。标注【均可用】的项当前会话可直接调用。\n");
-                if (!childOnlyTools.isEmpty()) {
-                    sb.append("\n【仅子会话可用】工具：\n");
-                    for (ToolConfigDTO t : childOnlyTools) {
-                        sb.append("- ").append(t.getName());
-                        if (t.getDescription() != null && !t.getDescription().isEmpty()) {
-                            sb.append(": ").append(t.getDescription());
-                        }
-                        sb.append("\n");
-                    }
-                }
-                if (!allAuthTools.isEmpty()) {
-                    sb.append("\n【均可用】工具：\n");
-                    for (ToolConfigDTO t : allAuthTools) {
-                        sb.append("- ").append(t.getName());
-                        if (t.getDescription() != null && !t.getDescription().isEmpty()) {
-                            sb.append(": ").append(t.getDescription());
-                        }
-                        sb.append("\n");
-                    }
-                }
-                if (!childOnlySkills.isEmpty()) {
-                    sb.append("\n【仅子会话可用】技能：\n");
-                    for (SkillConfigDTO s : childOnlySkills) {
-                        sb.append("- ").append(s.getName());
-                        if (s.getDescription() != null && !s.getDescription().isEmpty()) {
-                            sb.append(": ").append(s.getDescription());
-                        }
-                        sb.append("\n");
-                    }
-                }
-                if (!allAuthSkills.isEmpty()) {
-                    sb.append("\n【均可用】技能：\n");
-                    for (SkillConfigDTO s : allAuthSkills) {
-                        sb.append("- ").append(s.getName());
-                        if (s.getDescription() != null && !s.getDescription().isEmpty()) {
-                            sb.append(": ").append(s.getDescription());
-                        }
-                        sb.append("\n");
-                    }
-                }
-                sb.append("\n如需使用上述子会话工具/技能，可开启子会话执行任务：创建或复用子会话并通过回调执行用户消息，支持指定工具和技能");
-                sb.append("\n子会话执行期间请勿反复调用 callback_sub_session（发消息工具）轮询询问子会话结果，只需等候子会话通过 send_result_to_parent 返回执行结果；如需与子会话多轮交互可等待其返回后再发下一条消息。");
-                systemMessages.add(Message.builder()
-                        .role("system")
-                        .content(sb.toString())
-                        .build());
-            }
-        }
+        // 子会话相关的工具/技能权限说明生成逻辑已迁移至 platform-app 的 getPreSystemPrompt 实现
+        // （通过会话级前置提示词注入，见 ChatDataProvider.getPreSystemPrompt），此处不再生成。
 
         return new ContextSystemInfo(systemMessages, filteredLoadedSkills, loadedSkillMessages);
     }

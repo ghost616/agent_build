@@ -87,6 +87,7 @@ class ChatServiceHistoryGroupJsonTest {
         when(context.getHistory()).thenReturn(history);
         when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
+        when(context.isMainSession()).thenReturn(false);
         when(context.getRecentMessageCount()).thenReturn(recentCount);
         lenient().when(context.getConversationVariable(any())).thenReturn(expandedIndicesJson);
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());

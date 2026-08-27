@@ -1,0 +1,208 @@
+package com.ghost616.platform.service.agent;
+
+import com.ghost616.agentbase.dto.model.ModelConfigData;
+import com.ghost616.agentbase.service.agent.invoker.HookInvoker;
+import com.ghost616.platform.entity.ModelConfig;
+import com.ghost616.platform.entity.Session;
+import com.ghost616.platform.event.AgentChangedEvent;
+import com.ghost616.agentinteg.model.PlatformType;
+import com.ghost616.platform.repository.ModelConfigMapper;
+import com.ghost616.platform.repository.SessionMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationContext;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class DefaultChatDataProviderTest {
+
+    @Mock
+    private ModelConfigMapper modelConfigMapper;
+
+    @Mock
+    private SessionMapper sessionMapper;
+
+    @Mock
+    private ApplicationContext applicationContext;
+
+    @Mock
+    private SubSessionWebSocketModeResolver subSessionWebSocketModeResolver;
+
+    private DefaultChatDataProvider provider;
+
+    @BeforeEach
+    void setUp() {
+        provider = new DefaultChatDataProvider(modelConfigMapper, sessionMapper, applicationContext,
+                subSessionWebSocketModeResolver);
+    }
+
+    @Test
+    void getModelConfig_实体存在_返回ModelConfigData() {
+        ModelConfig entity = new ModelConfig();
+        entity.setId(1L);
+        entity.setApiKey("sk-test");
+        entity.setBaseUrl("https://test.com");
+        entity.setModelName("gpt-4");
+        entity.setTemperature(0.7);
+        entity.setMaxTokens(4096);
+        entity.setPlatformType(PlatformType.OPENAI);
+        when(modelConfigMapper.selectById(1L)).thenReturn(entity);
+
+        ModelConfigData result = provider.getModelConfig("1");
+
+        assertNotNull(result);
+        assertEquals("1", result.id());
+        assertEquals("sk-test", result.apiKey());
+        assertEquals("https://test.com", result.baseUrl());
+        assertEquals("gpt-4", result.modelName());
+        assertEquals(0.7, result.temperature());
+        assertEquals(4096, result.maxTokens());
+        assertEquals("OPENAI", result.platformType());
+    }
+
+    @Test
+    void getModelConfig_实体为null_返回null() {
+        when(modelConfigMapper.selectById(99L)).thenReturn(null);
+
+        ModelConfigData result = provider.getModelConfig("99");
+
+        assertNull(result);
+    }
+
+    @Test
+    void getModelConfig_platformType为null_platformType返回null() {
+        ModelConfig entity = new ModelConfig();
+        entity.setId(2L);
+        entity.setApiKey("sk-another");
+        entity.setBaseUrl("https://another.com");
+        entity.setModelName("claude-3");
+        entity.setTemperature(1.0);
+        entity.setMaxTokens(8192);
+        entity.setPlatformType(null);
+        when(modelConfigMapper.selectById(2L)).thenReturn(entity);
+
+        ModelConfigData result = provider.getModelConfig("2");
+
+        assertNotNull(result);
+        assertEquals("2", result.id());
+        assertNull(result.platformType());
+    }
+
+    @Test
+    void updateSessionModelId_会话存在_更新modelId() {
+        Session session = new Session();
+        session.setId(1L);
+        session.setModelId(10L);
+        session.setAgentId(100L);
+        when(sessionMapper.selectById(1L)).thenReturn(session);
+
+        provider.updateSessionModelId("1", "99");
+
+        assertEquals(99L, session.getModelId());
+        verify(sessionMapper).updateById((Session) session);
+    }
+
+    @Test
+    void updateSessionModelId_会话为null_不执行更新() {
+        when(sessionMapper.selectById(999L)).thenReturn(null);
+
+        provider.updateSessionModelId("999", "99");
+
+        verify(sessionMapper, never()).updateById(any(Session.class));
+    }
+
+    @Test
+    void getHooks_返回所有HookInvokerBean() {
+        HookInvoker hook1 = mock(HookInvoker.class);
+        HookInvoker hook2 = mock(HookInvoker.class);
+        when(applicationContext.getBeansOfType(HookInvoker.class))
+                .thenReturn(Map.of("hook1", hook1, "hook2", hook2));
+
+        List<HookInvoker> hooks = provider.getHooks();
+
+        assertEquals(2, hooks.size());
+        assertTrue(hooks.contains(hook1));
+        assertTrue(hooks.contains(hook2));
+    }
+
+    @Test
+    void getHooks_无HookInvokerBean_返回空列表() {
+        when(applicationContext.getBeansOfType(HookInvoker.class))
+                .thenReturn(Map.of());
+
+        List<HookInvoker> hooks = provider.getHooks();
+
+        assertNotNull(hooks);
+        assertTrue(hooks.isEmpty());
+    }
+
+    @Test
+    void getHooks_withSessionId_返回空列表() {
+        List<HookInvoker> hooks = provider.getHooks("1");
+
+        assertNotNull(hooks);
+        assertTrue(hooks.isEmpty());
+    }
+
+    @Test
+    void getPreSystemPrompt_默认返回null() {
+        assertNull(provider.getPreSystemPrompt("1"));
+    }
+
+    @Test
+    void getPreSystemPrompt_sessionId为空_返回null() {
+        assertNull(provider.getPreSystemPrompt(null));
+        assertNull(provider.getPreSystemPrompt(""));
+    }
+
+    @Test
+    void getPostSystemPrompt_默认返回null() {
+        assertNull(provider.getPostSystemPrompt("1"));
+    }
+
+    @Test
+    void getPostSystemPrompt_sessionId为空_返回null() {
+        assertNull(provider.getPostSystemPrompt(null));
+        assertNull(provider.getPostSystemPrompt(""));
+    }
+
+    @Test
+    void getPreSystemPrompt_WEBSOCKET子会话_返回含无需轮询引导的前置提示词() {
+        when(subSessionWebSocketModeResolver.isWebSocketSubSession("1")).thenReturn(true);
+
+        String result = provider.getPreSystemPrompt("1");
+
+        assertNotNull(result);
+        assertEquals(DefaultChatDataProvider.WEB_SOCKET_SUB_SESSION_PRE_SYSTEM_PROMPT, result);
+        assertTrue(result.contains("必须调用 send_result_to_parent 工具"));
+        assertTrue(result.contains("将执行结果作为参数发送给父会话"));
+        assertTrue(result.contains("禁止不调用工具直接结束"));
+        assertTrue(result.contains("结果内容为最终答案"));
+        assertTrue(result.contains("无需轮询获取父会话或其他会话状态"));
+        assertTrue(result.contains("只需完成分配的任务并回传结果"));
+    }
+
+    @Test
+    void getPreSystemPrompt_非WEBSOCKET子会话_返回null() {
+        when(subSessionWebSocketModeResolver.isWebSocketSubSession("1")).thenReturn(false);
+
+        String result = provider.getPreSystemPrompt("1");
+
+        assertNull(result);
+    }
+
+    @Test
+    void onAgentChanged_清空解析器缓存() {
+        provider.onAgentChanged(new AgentChangedEvent(this, 1L));
+
+        verify(subSessionWebSocketModeResolver).clearCache();
+    }
+}

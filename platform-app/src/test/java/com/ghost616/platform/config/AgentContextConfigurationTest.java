@@ -17,8 +17,10 @@ import com.ghost616.agentinteg.AgentAssembler;
 import com.ghost616.agentinteg.hook.SubSessionResultFallbackHook;
 import com.ghost616.agentinteg.hook.SubSessionResultProvider;
 import com.ghost616.agentbase.service.agent.invoker.SystemTool;
+import com.ghost616.platform.repository.AgentSkillMapper;
 import com.ghost616.platform.repository.ModelConfigMapper;
 import com.ghost616.platform.repository.SessionMapper;
+import com.ghost616.platform.repository.SkillConfigMapper;
 import com.ghost616.platform.service.agent.DatabaseAgentLog;
 import com.ghost616.platform.service.agent.DefaultChatDataCacheProvider;
 import com.ghost616.platform.service.agent.DefaultChatDataProvider;
@@ -66,10 +68,17 @@ class AgentContextConfigurationTest {
     @Mock
     private SubSessionResultProvider subSessionResultProvider;
 
+    @Mock
+    private AgentSkillMapper agentSkillMapper;
+
+    @Mock
+    private SkillConfigMapper skillConfigMapper;
+
     @Test
     void defaultChatDataProvider_正确创建实例() {
         DefaultChatDataProvider provider = config.defaultChatDataProvider(
-                modelConfigMapper, sessionMapper, applicationContext, subSessionWebSocketModeResolver);
+                modelConfigMapper, sessionMapper, applicationContext, subSessionWebSocketModeResolver,
+                mock(ToolDataProvider.class), agentSkillMapper, skillConfigMapper);
 
         assertNotNull(provider);
     }

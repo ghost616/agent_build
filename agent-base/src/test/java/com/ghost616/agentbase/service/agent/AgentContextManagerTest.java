@@ -1383,4 +1383,37 @@ class AgentContextManagerTest {
             verify(sessionManager, times(1)).getMessages(sessionId);
         }
     }
+
+    @Nested
+    class AgentSessionContextPreSystemPromptTest {
+
+        /**
+         * 仅 stub loadAgentContext：轻量构建（doBuild）不触发懒构建，
+         * 多余的 getMessages/getSessionTools stub 会触发 strict stubbing 报错。
+         */
+        private void stubLightContext() {
+            when(dataProvider.loadAgentContext(sessionId)).thenReturn(
+                    new ContextDataProvider.AgentContextData(agentId, "test prompt", "200", 10, List.of(), Map.of(), null, null, null, null));
+        }
+
+        @Test
+        void preSystemPrompt_初始为null_设置后返回() {
+            stubLightContext();
+            AgentContextManager.AgentSessionContext sessionContext = agentContextManager.build(sessionId).build();
+
+            assertNull(sessionContext.preSystemPrompt(), "初始 preSystemPrompt 应为 null");
+            sessionContext.setPreSystemPrompt("PRE_PROMPT");
+            assertEquals("PRE_PROMPT", sessionContext.preSystemPrompt(), "set 后应返回缓存值");
+        }
+
+        @Test
+        void preSystemPrompt_可更新覆盖旧值() {
+            stubLightContext();
+            AgentContextManager.AgentSessionContext sessionContext = agentContextManager.build(sessionId).build();
+
+            sessionContext.setPreSystemPrompt("v1");
+            sessionContext.setPreSystemPrompt("v2");
+            assertEquals("v2", sessionContext.preSystemPrompt(), "重复设置应覆盖旧值");
+        }
+    }
 }

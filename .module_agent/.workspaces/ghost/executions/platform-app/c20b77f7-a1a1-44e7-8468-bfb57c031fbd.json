@@ -1,0 +1,14 @@
+[
+  {
+    "plan_id": "plan_36c83a74-d95b-4334-9077-70817118515a",
+    "plan": "子会话权限说明迁移至 getPreSystemPrompt 实现（platform-app 侧）",
+    "modified_files": [
+      "platform-app/src/main/java/com/ghost616/platform/service/agent/DefaultChatDataProvider.java",
+      "platform-app/src/main/java/com/ghost616/platform/config/AgentContextConfiguration.java",
+      "platform-app/src/test/java/com/ghost616/platform/service/agent/DefaultChatDataProviderTest.java",
+      "platform-app/src/test/java/com/ghost616/platform/config/AgentContextConfigurationTest.java"
+    ],
+    "summary": "执行总结：本轮共修改 4 个文件——1) DefaultChatDataProvider.java：新增注入 ToolDataProvider/AgentSkillMapper/SkillConfigMapper；getPreSystemPrompt 重构：WS 子会话返回原 WEB_SOCKET_SUB_SESSION_PRE_SYSTEM_PROMPT（行为不变）；主会话（isChild 非 true）经 getSessionToolIds+getToolById 重建工具权限（CHILD→仅子会话可用、null/ALL→均可用，含 callback_sub_session 等内置工具）、AgentSkillMapper+SkillConfigMapper 重建技能权限（仅 ENABLED），文本严格复刻原 buildContextSystemInfo 权限说明（头段+四分组 name: description+两段结尾引导语），无分组项返回 null；子会话非 WS/会话不存在/sessionId 无效返回 null。2) AgentContextConfiguration.java：defaultChatDataProvider 工厂方法新增 3 个参数。3) DefaultChatDataProviderTest.java：适配 7 参构造器（新增 3 mock + AgentSkill TableInfo 初始化），新增 8 个权限说明用例。4) AgentContextConfigurationTest.java：适配工厂调用。模块元数据已更新（update_spec 会话管理/update_definition/append_history）。\n测试总结：全部测试通过。编译测试：mvn -pl platform-app -am compile BUILD SUCCESS（exit 0，reactor 5 模块全部 SUCCESS）；单元测试 DefaultChatDataProviderTest 22/22 通过（0 失败 0 错误 0 跳过）+ AgentContextConfigurationTest 12/12 通过（0 失败 0 错误 0 跳过），合计 34/34。离朱修复 2 处测试代码缺陷（SkillConfig.id 继承自 BaseEntity 导致 Lombok @Builder 无父类字段 builder 方法，enabledSkill 辅助方法与禁用技能用例改为 builder 后 setId，仅改测试文件未动产品代码）。环境无阻塞问题（settings.xml snapshotPolicy 警告、byte-buddy 警告均无影响；66 个预存测试问题与本次变更无关，本次仅运行相关测试类未受影响）。",
+    "errors": []
+  }
+]

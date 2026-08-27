@@ -1,0 +1,14 @@
+{
+  "plan_id": "plan_708c817c-8b52-4175-9581-06cad24c719c",
+  "module_name": "agent-base",
+  "development_plan": "子会话权限说明迁移与 preSystemPrompt 缓存（agent-base 侧）：\n1. AgentContextManager.AgentSessionContext 新增可变属性 private volatile String preSystemPrompt，提供 public String preSystemPrompt() 与 public void setPreSystemPrompt(String) 访问方法，用于缓存 getPreSystemPrompt 返回的前置提示词。\n2. ChatService 三个路由方法 chatViaChatCompletions / chatViaResponses / chatViaResponsesStateless 增加 AgentSessionContext 参数（chat() 方法 L115 已构建 sessionContext，调用三个方法时直接传入）。\n3. ChatService 新增私有方法 getPreSystemPrompt(AgentSessionContext sessionCtx, String sessionId)：若 sessionCtx.preSystemPrompt() 非 null 则直接返回；否则调用 chatDataProvider.getPreSystemPrompt(sessionId) 获取并 sessionCtx.setPreSystemPrompt 设值后返回；三处原 chatDataProvider.getPreSystemPrompt(sessionId) 调用点（chatViaChatCompletions L207、chatViaResponses L272、chatViaResponsesStateless L311）统一替换为该缓存方法。\n4. 移除 buildContextSystemInfo 中 context.isMainSession() 分支（子会话相关的工具/技能权限说明生成逻辑，约 L511-584），该功能迁移至 platform-app 的 getPreSystemPrompt 实现；移除后保留技能列表与已加载技能消息的既有逻辑。\n5. 适配 agent-base 模块受影响测试（ChatServiceTest、ChatServiceResponsesTest、ChatServiceFilteringTest、ChatServiceNoLoadSkillsTest、ChatServiceLogTest、ChatServiceHistoryGroupJsonTest、AgentContextManagerTest 等）：三个方法签名变化导致的编译适配；新增/调整用例覆盖 preSystemPrompt 缓存逻辑（首次获取后缓存、缓存命中不再调 provider、权限说明消息从 systemMessages 中移除后相关断言更新）。\n6. 运行 agent-base 模块 Maven 编译与全部测试，确保编译通过且全部测试通过。",
+  "session_id": "ac47d987-feed-4f47-9765-19e25c560893",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/AgentContextManager.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ChatService.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceFilteringTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceHistoryGroupJsonTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/AgentContextManagerTest.java"
+  ]
+}

@@ -32,17 +32,17 @@
     "test_passed": true
   },
   {
-    "plan_id": "plan_223acc11-aaf2-4d0f-9485-7869d0aad14e",
-    "plan_summary": "包重命名 com.ghost616.agentinteg.subsession → com.ghost616.agentinteg.hook（3 文件迁移 + import 引用修改 + 测试验证）",
-    "starter_session_id": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
+    "plan_id": "plan_708c817c-8b52-4175-9581-06cad24c719c",
+    "plan_summary": "子会话权限说明迁移与 preSystemPrompt 缓存（agent-base 侧）",
+    "starter_session_id": "54371bc7-e32f-4291-8663-86cd992f101e",
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
   },
   {
-    "plan_id": "plan_673ba3f4-b746-4ded-bf78-ca1917905d0f",
-    "plan_summary": "适配 agent-integration 包重命名后的 import 引用（3 文件改 import + 全局确认无残留 + 编译测试）",
-    "starter_session_id": "e32df826-c59d-4f26-84ce-8dd91439ba5c",
+    "plan_id": "plan_36c83a74-d95b-4334-9077-70817118515a",
+    "plan_summary": "子会话权限说明迁移至 getPreSystemPrompt 实现（platform-app 侧）",
+    "starter_session_id": "54371bc7-e32f-4291-8663-86cd992f101e",
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
