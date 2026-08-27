@@ -150,5 +150,6 @@
   "agent-base/src/main/java/com/ghost616/agentbase/core/ThreadVariableWrapper.java": "220daa529d263ba5c220c34628ee4f2a",
   "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/SubSessionCallbackFunctionalTest.java": "b002eacdd71aa2c3f930d6b7443de08b",
   "agent-integration/src/test/java/com/ghost616/agentinteg/tool/SubSessionCallbackToolTest.java": "b68e7becfb4cc894630ba78831f53cfa",
-  "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookManagerTest.java": "1ec996a6e07541702fd4109d6671806e"
+  "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookManagerTest.java": "1ec996a6e07541702fd4109d6671806e",
+  "agent-base/src/main/java/com/ghost616/agentbase/enums/HookPhase.java": "b670c7dbcd554355aff114b0c318e5dd"
 }

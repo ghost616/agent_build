@@ -10,8 +10,7 @@ public enum HookPhase {
     BEFORE_MESSAGE_SEND("消息发送前"),
     AFTER_MESSAGE_RECEIVE("消息接收后"),
     BEFORE_TOOL_CALL("工具调用前"),
-    AFTER_TOOL_CALL("工具调用后"),
-    AFTER_PRE_SYSTEM_PROMPT_BUILD("前置系统提示词构建后");
+    AFTER_TOOL_CALL("工具调用后");
 
     private final String description;
 

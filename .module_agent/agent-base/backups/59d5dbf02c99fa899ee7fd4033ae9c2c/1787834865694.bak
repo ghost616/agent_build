@@ -13,12 +13,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.ghost616.agentbase.core.AgentComponentRegistry;
+import com.ghost616.agentbase.core.ThreadVariableHandler;
+import com.ghost616.agentbase.core.ThreadVariableWrapper;
 import com.ghost616.agentbase.util.JsonMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
-import com.ghost616.agentbase.service.agent.invoker.HookData;
+import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
 import com.ghost616.agentbase.service.agent.log.AgentLog;
 import com.ghost616.agentbase.service.agent.log.ErrorLogData;
@@ -33,17 +35,18 @@ import com.ghost616.agentbase.service.model.invoker.ModelInvokerManager;
 
 import com.ghost616.agentbase.dto.chat.ChatRequest;
 import com.ghost616.agentbase.dto.model.ChatChunk;
+import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolDefinition;
 import com.ghost616.agentbase.dto.skill.SkillConfigDTO;
 import com.ghost616.agentbase.dto.tool.ToolConfigDTO;
-import com.ghost616.agentbase.enums.ErrorCode;
+import com.ghost616.agentbase.enums.AgentErrorCode;
 import com.ghost616.agentbase.enums.HookPhase;
 import com.ghost616.agentbase.enums.LogLevel;
 import com.ghost616.agentbase.enums.RequestType;
 import com.ghost616.agentbase.enums.SessionAuthType;
-import com.ghost616.agentbase.exception.BusinessException;
+import com.ghost616.agentbase.exception.AgentException;
 import com.ghost616.agentbase.service.agent.invoker.HistoryQuerySystemTool;
 import com.ghost616.agentbase.service.agent.invoker.LoadSkillsSystemTool;
 import com.ghost616.agentbase.service.agent.invoker.SystemToolManager;
@@ -55,6 +58,7 @@ import com.ghost616.agentbase.service.model.invoker.ModelInvoker;
 public class ChatService {
 
     public static final String TOOL_CONTINUE_MARKER = "[tool_continue]";
+    public static final String SEND_USER_MESSAGE_MARKER = "[send_user_message]";
 
     private static final int DEFAULT_FOLD_INTERVAL = 10;
     private static final String HISTORY_GROUP_PREFIX = "【历史消息组";
@@ -114,9 +118,11 @@ public class ChatService {
         AgentExecutionContext.AgentContextMutator contextMutator = sessionContext.mutator();
 
         boolean isToolContinue = TOOL_CONTINUE_MARKER.equals(content);
+        boolean isSendUserMessage = SEND_USER_MESSAGE_MARKER.equals(content);
         String conversationId = request.getConversationId();
+        List<ImageContent> images = request.getImages();
 
-        if (!isToolContinue) {
+        if (!isToolContinue && !isSendUserMessage) {
             contextMutator.resetStopped();
             contextMutator.clearConversationVariables();
             if (context.getParentSessionId() == null
@@ -124,21 +130,22 @@ public class ChatService {
                 addLog(ErrorLogData.builder()
                         .logLevel(LogLevel.ERROR)
                         .context(context)
-                        .errorCode(ErrorCode.PARAM_INVALID.getCode())
+                        .errorCode(AgentErrorCode.PARAM_INVALID.getCode())
                         .message("conversationId 不能为空")
                         .build());
-                throw new BusinessException(ErrorCode.PARAM_INVALID, "conversationId 不能为空");
+                throw new AgentException(AgentErrorCode.PARAM_INVALID, "conversationId 不能为空");
             }
             contextMutator.setConversationId(conversationId);
             sessionManager.messageSave().sessionId(sessionId).role("user").content(content)
+                    .images(images)
+                    .userInput(true)
                     .conversationId(context.getConversationId()).save();
 
             AgentExecutionContext.HistoryEntry userEntry = new AgentExecutionContext.HistoryEntry(
                     "user", content, null, null,
-                    context.getHistory().size() + 1,
                     LocalDateTime.now(),
                     Collections.emptyList(),
-                    null, null, null);
+                    null, null, null, images, true);
             contextMutator.addHistoryEntry(userEntry);
         }
 
@@ -161,14 +168,14 @@ public class ChatService {
             addLog(ErrorLogData.builder()
                     .logLevel(LogLevel.ERROR)
                     .context(context)
-                    .errorCode(ErrorCode.MODEL_NOT_FOUND.getCode())
+                    .errorCode(AgentErrorCode.MODEL_NOT_FOUND.getCode())
                     .message("模型配置不存在: " + finalModelId)
                     .build());
-            throw new BusinessException(ErrorCode.MODEL_NOT_FOUND);
+            throw new AgentException(AgentErrorCode.MODEL_NOT_FOUND);
         }
 
-        hookManager.triggerSessionHooks(sessionId, HookPhase.SESSION_START, context, new HookData((ChatChunk) null));
-        hookManager.triggerHooks(HookPhase.SESSION_START, context, new HookData((ChatChunk) null));
+        hookManager.triggerSessionHooks(sessionId, HookPhase.SESSION_START, context, new ChatChunkHookData((ChatChunk) null));
+        hookManager.triggerHooks(HookPhase.SESSION_START, context, new ChatChunkHookData((ChatChunk) null));
 
         String requestType = configData.requestType();
         addLog(RouteLogData.builder()
@@ -177,16 +184,17 @@ public class ChatService {
                 .requestType(requestType)
                 .build());
         if (RequestType.RESPONSES.getCode().equals(requestType)) {
-            return chatViaResponses(request, context, contextMutator, sessionId, configData);
+            return chatViaResponses(request, sessionContext, context, contextMutator, sessionId, configData);
         }
         if (RequestType.RESPONSES_STATELESS.getCode().equals(requestType)) {
-            return chatViaResponsesStateless(request, context, contextMutator, sessionId, configData);
+            return chatViaResponsesStateless(request, sessionContext, context, contextMutator, sessionId, configData);
         }
-        return chatViaChatCompletions(request, context, contextMutator, sessionId, configData);
+        return chatViaChatCompletions(request, sessionContext, context, contextMutator, sessionId, configData);
     }
 
     private Flux<ServerSentEvent<ChatChunk>> chatViaChatCompletions(
             ChatRequest request,
+            AgentContextManager.AgentSessionContext sessionCtx,
             AgentExecutionContext context,
             AgentExecutionContext.AgentContextMutator contextMutator,
             String sessionId,
@@ -196,6 +204,14 @@ public class ChatService {
                 .role("system")
                 .content(context.getSystemPrompt() != null ? context.getSystemPrompt() : "")
                 .build());
+
+        String preSystemPrompt = getPreSystemPrompt(sessionCtx, sessionId);
+        if (preSystemPrompt != null && !preSystemPrompt.isBlank()) {
+            messages.add(1, Message.builder()
+                    .role("system")
+                    .content(preSystemPrompt)
+                    .build());
+        }
 
         List<ToolDefinition> toolDefinitions = systemToolManager.getToolDefinitions();
         ContextSystemInfo systemInfo = buildContextSystemInfo(context, toolDefinitions);
@@ -207,8 +223,12 @@ public class ChatService {
 
         FoldResult foldResult = filterAndFold(messages, context);
         messages = foldResult.messages();
-        messages = insertLoadedSkillMessages(messages, systemInfo.loadedSkillMessages());
-        messages = insertAnchorMessages(messages, foldResult.anchorMessages());
+
+        List<Message> postMessages = new ArrayList<>();
+        collectLoadedSkillMessages(postMessages, systemInfo.loadedSkillMessages());
+        collectAnchorMessages(postMessages, foldResult.anchorMessages());
+        collectPostSystemPrompt(postMessages, chatDataProvider.getPostSystemPrompt(sessionId));
+        messages = insertPostSystemMessages(messages, postMessages);
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
@@ -238,6 +258,7 @@ public class ChatService {
 
     private Flux<ServerSentEvent<ChatChunk>> chatViaResponses(
             ChatRequest request,
+            AgentContextManager.AgentSessionContext sessionCtx,
             AgentExecutionContext context,
             AgentExecutionContext.AgentContextMutator contextMutator,
             String sessionId,
@@ -249,7 +270,8 @@ public class ChatService {
         FoldResult foldResult = filterAndFold(input, context);
         input = foldResult.messages();
 
-        String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages());
+        String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages(),
+                getPreSystemPrompt(sessionCtx, sessionId), chatDataProvider.getPostSystemPrompt(sessionId));
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
@@ -276,6 +298,7 @@ public class ChatService {
 
     private Flux<ServerSentEvent<ChatChunk>> chatViaResponsesStateless(
             ChatRequest request,
+            AgentContextManager.AgentSessionContext sessionCtx,
             AgentExecutionContext context,
             AgentExecutionContext.AgentContextMutator contextMutator,
             String sessionId,
@@ -287,7 +310,8 @@ public class ChatService {
         FoldResult foldResult = filterAndFold(input, context);
         input = foldResult.messages();
 
-        String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages());
+        String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages(),
+                getPreSystemPrompt(sessionCtx, sessionId), chatDataProvider.getPostSystemPrompt(sessionId));
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
@@ -307,15 +331,38 @@ public class ChatService {
         return toSseStream(stream, context, contextMutator, sessionId);
     }
 
+    /**
+     * 获取会话级前置系统提示词（带缓存）：sessionCtx.preSystemPrompt() 非 null 时直接返回缓存值；
+     * 否则调用 chatDataProvider.getPreSystemPrompt(sessionId) 获取并写入缓存后返回。
+     * 同一会话上下文多次请求复用缓存，避免重复调用数据提供者。
+     */
+    private String getPreSystemPrompt(AgentContextManager.AgentSessionContext sessionCtx, String sessionId) {
+        String cached = sessionCtx.preSystemPrompt();
+        if (cached != null) {
+            return cached;
+        }
+        String preSystemPrompt = chatDataProvider.getPreSystemPrompt(sessionId);
+        sessionCtx.setPreSystemPrompt(preSystemPrompt);
+        return preSystemPrompt;
+    }
+
     private String buildInstructions(
             AgentExecutionContext context,
             ContextSystemInfo systemInfo,
             List<Message> loadedSkillMessages,
-            List<Message> anchorMessages) {
+            List<Message> anchorMessages,
+            String preSystemPrompt,
+            String postSystemPrompt) {
         StringBuilder instructions = new StringBuilder();
         String systemPrompt = context.getSystemPrompt();
         if (systemPrompt != null) {
             instructions.append(systemPrompt);
+        }
+        if (preSystemPrompt != null && !preSystemPrompt.isBlank()) {
+            if (instructions.length() > 0) {
+                instructions.append("\n\n");
+            }
+            instructions.append(preSystemPrompt);
         }
         for (Message systemMessage : systemInfo.systemMessages()) {
             String content = systemMessage.getContent();
@@ -344,6 +391,12 @@ public class ChatService {
                 instructions.append(content);
             }
         }
+        if (postSystemPrompt != null && !postSystemPrompt.isBlank()) {
+            if (instructions.length() > 0) {
+                instructions.append("\n\n");
+            }
+            instructions.append(postSystemPrompt);
+        }
         return instructions.toString();
     }
 
@@ -361,6 +414,10 @@ public class ChatService {
         if (entry.toolInfo() != null) {
             builder.toolInfo(entry.toolInfo());
         }
+        if (entry.images() != null && !entry.images().isEmpty()) {
+            builder.images(entry.images());
+        }
+        builder.userInput(entry.userInput());
         return builder.build();
     }
 
@@ -469,107 +526,59 @@ public class ChatService {
             }
         }
 
-        if (context.isMainSession()) {
-            List<ToolConfigDTO> childOnlyTools = new ArrayList<>();
-            List<ToolConfigDTO> allAuthTools = new ArrayList<>();
-            for (ToolConfigDTO t : context.getTools()) {
-                SessionAuthType auth = t.getSessionAuth();
-                if (auth == SessionAuthType.CHILD) {
-                    childOnlyTools.add(t);
-                } else if (auth == null || auth == SessionAuthType.ALL) {
-                    allAuthTools.add(t);
-                }
-            }
-            List<SkillConfigDTO> childOnlySkills = new ArrayList<>();
-            List<SkillConfigDTO> allAuthSkills = new ArrayList<>();
-            if (skills != null) {
-                for (SkillConfigDTO s : skills) {
-                    SessionAuthType auth = s.getSessionAuth();
-                    if (auth == SessionAuthType.CHILD) {
-                        childOnlySkills.add(s);
-                    } else if (auth == null || auth == SessionAuthType.ALL) {
-                        allAuthSkills.add(s);
-                    }
-                }
-            }
-            if (!childOnlyTools.isEmpty() || !allAuthTools.isEmpty() || !childOnlySkills.isEmpty() || !allAuthSkills.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("以下为子会话相关的工具/技能权限说明。标注【仅子会话可用】的项不可在当前会话直接调用，需通过子会话使用。标注【均可用】的项当前会话可直接调用。\n");
-                if (!childOnlyTools.isEmpty()) {
-                    sb.append("\n【仅子会话可用】工具：\n");
-                    for (ToolConfigDTO t : childOnlyTools) {
-                        sb.append("- ").append(t.getName());
-                        if (t.getDescription() != null && !t.getDescription().isEmpty()) {
-                            sb.append(": ").append(t.getDescription());
-                        }
-                        sb.append("\n");
-                    }
-                }
-                if (!allAuthTools.isEmpty()) {
-                    sb.append("\n【均可用】工具：\n");
-                    for (ToolConfigDTO t : allAuthTools) {
-                        sb.append("- ").append(t.getName());
-                        if (t.getDescription() != null && !t.getDescription().isEmpty()) {
-                            sb.append(": ").append(t.getDescription());
-                        }
-                        sb.append("\n");
-                    }
-                }
-                if (!childOnlySkills.isEmpty()) {
-                    sb.append("\n【仅子会话可用】技能：\n");
-                    for (SkillConfigDTO s : childOnlySkills) {
-                        sb.append("- ").append(s.getName());
-                        if (s.getDescription() != null && !s.getDescription().isEmpty()) {
-                            sb.append(": ").append(s.getDescription());
-                        }
-                        sb.append("\n");
-                    }
-                }
-                if (!allAuthSkills.isEmpty()) {
-                    sb.append("\n【均可用】技能：\n");
-                    for (SkillConfigDTO s : allAuthSkills) {
-                        sb.append("- ").append(s.getName());
-                        if (s.getDescription() != null && !s.getDescription().isEmpty()) {
-                            sb.append(": ").append(s.getDescription());
-                        }
-                        sb.append("\n");
-                    }
-                }
-                sb.append("\n如需使用上述子会话工具/技能，请调用 _sys_create_child_session 开启子会话执行任务");
-                systemMessages.add(Message.builder()
-                        .role("system")
-                        .content(sb.toString())
-                        .build());
-            }
-        }
+        // 子会话相关的工具/技能权限说明生成逻辑已迁移至 platform-app 的 getPreSystemPrompt 实现
+        // （通过会话级前置提示词注入，见 ChatDataProvider.getPreSystemPrompt），此处不再生成。
 
         return new ContextSystemInfo(systemMessages, filteredLoadedSkills, loadedSkillMessages);
     }
 
-    private List<Message> insertLoadedSkillMessages(List<Message> messages, List<Message> loadedSkillMessages) {
+    /**
+     * 将已加载技能 system 消息收集到统一后置消息列表（null/空列表跳过）。
+     */
+    private void collectLoadedSkillMessages(List<Message> target, List<Message> loadedSkillMessages) {
         if (loadedSkillMessages == null || loadedSkillMessages.isEmpty()) {
-            return messages;
+            return;
         }
-        List<Message> result = new ArrayList<>(messages);
-        int insertIndex = findLastUserIndex(result);
-        if (insertIndex < 0) {
-            result.addAll(loadedSkillMessages);
-        } else {
-            result.addAll(insertIndex, loadedSkillMessages);
-        }
-        return result;
+        target.addAll(loadedSkillMessages);
     }
 
-    private List<Message> insertAnchorMessages(List<Message> messages, List<Message> anchorMessages) {
+    /**
+     * 将锚点展开 system 消息收集到统一后置消息列表（null/空列表跳过）。
+     */
+    private void collectAnchorMessages(List<Message> target, List<Message> anchorMessages) {
         if (anchorMessages == null || anchorMessages.isEmpty()) {
+            return;
+        }
+        target.addAll(anchorMessages);
+    }
+
+    /**
+     * 将会话级后置提示词构建为 system 消息收集到统一后置消息列表（空白字符串跳过）。
+     */
+    private void collectPostSystemPrompt(List<Message> target, String postSystemPrompt) {
+        if (postSystemPrompt == null || postSystemPrompt.isBlank()) {
+            return;
+        }
+        target.add(Message.builder()
+                .role("system")
+                .content(postSystemPrompt)
+                .build());
+    }
+
+    /**
+     * 将统一后置消息列表插入到最后一条 user 消息之前（无 user 消息时追加到列表末尾），
+     * 仅调用一次 findLastUserIndex；postMessages 为 null 或空时直接返回原列表。
+     */
+    private List<Message> insertPostSystemMessages(List<Message> messages, List<Message> postMessages) {
+        if (postMessages == null || postMessages.isEmpty()) {
             return messages;
         }
         List<Message> result = new ArrayList<>(messages);
         int insertIndex = findLastUserIndex(result);
         if (insertIndex < 0) {
-            result.addAll(anchorMessages);
+            result.addAll(postMessages);
         } else {
-            result.addAll(insertIndex, anchorMessages);
+            result.addAll(insertIndex, postMessages);
         }
         return result;
     }
@@ -620,45 +629,66 @@ public class ChatService {
             String sessionId) {
         AtomicBoolean hasToolCalls = new AtomicBoolean(false);
 
+        ThreadVariableHandler threadVariableHandler = registry.getThreadVariableHandler();
+        ThreadVariableWrapper threadVariableWrapper = threadVariableHandler != null ? threadVariableHandler.wrap() : null;
+
         return stream
                 .takeWhile(chunk -> !context.isStopped())
                 .doOnNext(chunk -> {
-                    if (chunk.getToolCalls() != null && !chunk.getToolCalls().isEmpty()) {
-                        if (hasToolCalls.compareAndSet(false, true)) {
+                    if (threadVariableWrapper != null) {
+                        threadVariableWrapper.apply();
+                    }
+                    try {
+                        if (chunk.getToolCalls() != null && !chunk.getToolCalls().isEmpty()) {
+                            if (hasToolCalls.compareAndSet(false, true)) {
+                                addLog(StreamEventLogData.builder()
+                                        .logLevel(LogLevel.INFO)
+                                        .context(context)
+                                        .eventType("ToolCallDetected")
+                                        .hasToolCalls(true)
+                                        .build());
+                            }
+                        }
+                        if (chunk.getResponseId() != null) {
+                            contextMutator.setLastResponseId(chunk.getResponseId());
+                        }
+                        if (chunk.getFinishReason() != null) {
+                            chunk.setHasToolCalls(hasToolCalls.get());
                             addLog(StreamEventLogData.builder()
                                     .logLevel(LogLevel.INFO)
                                     .context(context)
-                                    .eventType("ToolCallDetected")
-                                    .hasToolCalls(true)
+                                    .eventType("StreamComplete")
+                                    .hasToolCalls(hasToolCalls.get())
                                     .build());
                         }
+                        hookManager.triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new ChatChunkHookData(chunk));
+                        hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new ChatChunkHookData(chunk));
+                        hookManager.executePostHooks(context, new ChatChunkHookData(chunk));
+                    } finally {
+                        if (threadVariableWrapper != null) {
+                            threadVariableWrapper.clear();
+                        }
                     }
-                    if (chunk.getResponseId() != null) {
-                        contextMutator.setLastResponseId(chunk.getResponseId());
-                    }
-                    if (chunk.getFinishReason() != null) {
-                        chunk.setHasToolCalls(hasToolCalls.get());
-                        addLog(StreamEventLogData.builder()
-                                .logLevel(LogLevel.INFO)
-                                .context(context)
-                                .eventType("StreamComplete")
-                                .hasToolCalls(hasToolCalls.get())
-                                .build());
-                    }
-                    hookManager.triggerSessionHooks(sessionId, HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
-                    hookManager.triggerHooks(HookPhase.BEFORE_MESSAGE_SEND, context, new HookData(chunk));
-                    hookManager.executePostHooks(context, new HookData(chunk));
                 })
                 .map(chunk -> ServerSentEvent.<ChatChunk>builder()
                         .data(chunk)
                         .build())
                 .doOnComplete(() -> {
-                    ChatChunk completeChunk = ChatChunk.builder()
-                            .hasToolCalls(hasToolCalls.get())
-                            .build();
-                    hookManager.triggerSessionHooks(sessionId, HookPhase.AFTER_MESSAGE_RECEIVE, context, new HookData(completeChunk));
-                    hookManager.triggerHooks(HookPhase.AFTER_MESSAGE_RECEIVE, context, new HookData(completeChunk));
-                    hookManager.executePostHooks(context, new HookData(completeChunk));
+                    if (threadVariableWrapper != null) {
+                        threadVariableWrapper.apply();
+                    }
+                    try {
+                        ChatChunk completeChunk = ChatChunk.builder()
+                                .hasToolCalls(hasToolCalls.get())
+                                .build();
+                        hookManager.triggerSessionHooks(sessionId, HookPhase.AFTER_MESSAGE_RECEIVE, context, new ChatChunkHookData(completeChunk));
+                        hookManager.triggerHooks(HookPhase.AFTER_MESSAGE_RECEIVE, context, new ChatChunkHookData(completeChunk));
+                        hookManager.executePostHooks(context, new ChatChunkHookData(completeChunk));
+                    } finally {
+                        if (threadVariableWrapper != null) {
+                            threadVariableWrapper.clear();
+                        }
+                    }
                 })
                 .doOnCancel(() -> {
                     addLog(StreamEventLogData.builder()
@@ -684,7 +714,7 @@ public class ChatService {
             addLog(ErrorLogData.builder()
                     .logLevel(LogLevel.ERROR)
                     .context(context)
-                    .errorCode(ErrorCode.SYSTEM_ERROR.getCode())
+                    .errorCode(AgentErrorCode.SYSTEM_ERROR.getCode())
                     .message("解析已加载技能列表失败")
                     .exception(e)
                     .build());
@@ -726,7 +756,7 @@ public class ChatService {
         while (i < messages.size()) {
             int groupStart = i;
             i++;
-            while (i < messages.size() && !"user".equals(messages.get(i).getRole())) {
+            while (i < messages.size() && !isFoldGroupStart(messages.get(i))) {
                 i++;
             }
             List<Message> group = new ArrayList<>();
@@ -749,8 +779,13 @@ public class ChatService {
 
         for (int g = 0; g < groups.size(); g++) {
             if (g < foldedCount) {
+                // 折叠区仅保留首条 user 消息的 content 文本（忽略图片，避免图片随折叠历史重复传给模型）
                 List<Message> group = groups.get(g);
-                result.add(group.get(0));
+                Message first = group.get(0);
+                result.add(Message.builder()
+                        .role(first.getRole())
+                        .content(first.getContent())
+                        .build());
                 result.add(Message.builder()
                         .role("assistant")
                         .content("此为历史消息索引为" + g + "，如果想要展开请调用历史消息工具")
@@ -782,6 +817,17 @@ public class ChatService {
         return new FoldResult(result, anchorMessages);
     }
 
+    /**
+     * 折叠分组点判断：仅 user 角色且 user_input=true（用户真实输入）的 user 消息产生新组；
+     * user_input=false（会话间传递，如子会话/父会话推送的 user 消息）不产生新组，归入相邻组。
+     *
+     * @param message 待判断的消息
+     * @return 是否为折叠分组起点
+     */
+    private boolean isFoldGroupStart(Message message) {
+        return "user".equals(message.getRole()) && Boolean.TRUE.equals(message.getUserInput());
+    }
+
     private Message buildHistoryGroupMessage(List<Message> group, int groupIndex, AgentExecutionContext context) {
         StringBuilder sb = new StringBuilder();
         sb.append(HISTORY_GROUP_PREFIX).append(groupIndex).append("】完整内容如下：\n");
@@ -793,7 +839,7 @@ public class ChatService {
                 addLog(ErrorLogData.builder()
                         .logLevel(LogLevel.WARN)
                         .context(context)
-                        .errorCode(ErrorCode.SYSTEM_ERROR.getCode())
+                        .errorCode(AgentErrorCode.SYSTEM_ERROR.getCode())
                         .message("序列化历史组消息失败")
                         .exception(e)
                         .build());
@@ -854,7 +900,7 @@ public class ChatService {
             addLog(ErrorLogData.builder()
                     .logLevel(LogLevel.ERROR)
                     .context(context)
-                    .errorCode(ErrorCode.SYSTEM_ERROR.getCode())
+                    .errorCode(AgentErrorCode.SYSTEM_ERROR.getCode())
                     .message("解析历史消息展开索引失败")
                     .exception(e)
                     .build());

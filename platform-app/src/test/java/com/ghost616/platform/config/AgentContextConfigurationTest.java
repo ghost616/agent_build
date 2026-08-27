@@ -14,6 +14,7 @@ import com.ghost616.agentbase.service.agent.log.LogData;
 import com.ghost616.agentbase.service.model.invoker.ModelInvokerFactory;
 import com.ghost616.agentbase.service.agent.invoker.HookInvoker;
 import com.ghost616.agentinteg.AgentAssembler;
+import com.ghost616.agentinteg.hook.AvailableSkillsSystemHook;
 import com.ghost616.agentinteg.hook.SubSessionResultFallbackHook;
 import com.ghost616.agentinteg.hook.SubSessionResultProvider;
 import com.ghost616.agentbase.service.agent.invoker.SystemTool;
@@ -91,6 +92,29 @@ class AgentContextConfigurationTest {
         // 实现 SystemPostHook → SystemHook → HookInvoker，可被 getBeansOfType(HookInvoker.class) 自动收集
         assertInstanceOf(HookInvoker.class, hook);
         assertSame(SubSessionResultFallbackHook.class, hook.getClass());
+    }
+
+    @Test
+    void availableSkillsSystemHook_正确创建为HookInvoker() {
+        AvailableSkillsSystemHook hook = config.availableSkillsSystemHook();
+
+        assertNotNull(hook);
+        // 实现 SystemHook → HookInvoker，可被 getBeansOfType(HookInvoker.class) 自动收集
+        assertInstanceOf(HookInvoker.class, hook);
+        assertSame(AvailableSkillsSystemHook.class, hook.getClass());
+    }
+
+    @Test
+    void defaultChatDataProvider_getHooks_收集AvailableSkillsSystemHook() {
+        AvailableSkillsSystemHook hook = config.availableSkillsSystemHook();
+        when(applicationContext.getBeansOfType(HookInvoker.class))
+                .thenReturn(Map.of("availableSkillsSystemHook", hook));
+
+        DefaultChatDataProvider provider = config.defaultChatDataProvider(
+                modelConfigMapper, sessionMapper, applicationContext, subSessionWebSocketModeResolver,
+                mock(ToolDataProvider.class), agentSkillMapper, skillConfigMapper);
+
+        assertTrue(provider.getHooks().contains(hook));
     }
 
     @Test

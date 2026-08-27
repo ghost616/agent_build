@@ -1,5 +1,6 @@
 package com.ghost616.platform.config;
 
+import com.ghost616.agentbase.service.agent.ChatDataCacheManager;
 import com.ghost616.agentbase.service.agent.ChatDataProvider;
 import com.ghost616.agentbase.service.agent.ChatService;
 import com.ghost616.agentbase.service.agent.ContextDataProvider;
@@ -8,14 +9,23 @@ import com.ghost616.agentbase.service.agent.ToolDataProvider;
 import com.ghost616.agentbase.service.agent.ToolExecutionService;
 import com.ghost616.agentbase.service.agent.ToolExecutionProvider;
 import com.ghost616.agentbase.service.agent.invoker.SystemToolProvider;
-import com.ghost616.agentbase.service.model.invoker.ModelInvokerFactory;
-import com.ghost616.agentinteg.AgentAssembler;
-import com.ghost616.agentbase.service.agent.invoker.SystemTool;
 import com.ghost616.agentbase.sendmessage.MessageSender;
+import com.ghost616.agentbase.service.agent.log.LogData;
+import com.ghost616.agentbase.service.model.invoker.ModelInvokerFactory;
+import com.ghost616.agentbase.service.agent.invoker.HookInvoker;
+import com.ghost616.agentinteg.AgentAssembler;
+import com.ghost616.agentinteg.hook.SubSessionResultFallbackHook;
+import com.ghost616.agentinteg.hook.SubSessionResultProvider;
+import com.ghost616.agentbase.service.agent.invoker.SystemTool;
+import com.ghost616.platform.repository.AgentSkillMapper;
 import com.ghost616.platform.repository.ModelConfigMapper;
 import com.ghost616.platform.repository.SessionMapper;
+import com.ghost616.platform.repository.SkillConfigMapper;
+import com.ghost616.platform.service.agent.DatabaseAgentLog;
+import com.ghost616.platform.service.agent.DefaultChatDataCacheProvider;
 import com.ghost616.platform.service.agent.DefaultChatDataProvider;
-import com.ghost616.platform.service.agent.DefaultSubSessionCallback;
+import com.ghost616.platform.service.agent.SubSessionWebSocketModeResolver;
+import com.ghost616.platform.session.UserContextThreadVariableHandler;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,20 +57,40 @@ class AgentContextConfigurationTest {
     private ApplicationContext applicationContext;
 
     @Mock
-    private DefaultSubSessionCallback defaultSubSessionCallback;
-
-    @Mock
     private ToolExecutionProvider toolExecutionProvider;
 
     @Mock
-    private MessageSender messageSender;
+    private DatabaseAgentLog databaseAgentLog;
+
+    @Mock
+    private SubSessionWebSocketModeResolver subSessionWebSocketModeResolver;
+
+    @Mock
+    private SubSessionResultProvider subSessionResultProvider;
+
+    @Mock
+    private AgentSkillMapper agentSkillMapper;
+
+    @Mock
+    private SkillConfigMapper skillConfigMapper;
 
     @Test
     void defaultChatDataProvider_正确创建实例() {
         DefaultChatDataProvider provider = config.defaultChatDataProvider(
-                modelConfigMapper, sessionMapper, applicationContext);
+                modelConfigMapper, sessionMapper, applicationContext, subSessionWebSocketModeResolver,
+                mock(ToolDataProvider.class), agentSkillMapper, skillConfigMapper);
 
         assertNotNull(provider);
+    }
+
+    @Test
+    void subSessionResultFallbackHook_正确创建并注入Provider实现() {
+        SubSessionResultFallbackHook hook = config.subSessionResultFallbackHook(subSessionResultProvider);
+
+        assertNotNull(hook);
+        // 实现 SystemPostHook → SystemHook → HookInvoker，可被 getBeansOfType(HookInvoker.class) 自动收集
+        assertInstanceOf(HookInvoker.class, hook);
+        assertSame(SubSessionResultFallbackHook.class, hook.getClass());
     }
 
     @Test
@@ -69,7 +99,8 @@ class AgentContextConfigurationTest {
         ModelInvokerFactory modelInvokerFactory = mock(ModelInvokerFactory.class);
         ChatDataProvider chatDataProvider = mock(ChatDataProvider.class);
 
-        AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider, toolExecutionProvider, messageSender);
+        AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider,
+                toolExecutionProvider, new UserContextThreadVariableHandler(), mock(MessageSender.class));
 
         assertNotNull(agentAssembler);
     }
@@ -80,10 +111,38 @@ class AgentContextConfigurationTest {
         ModelInvokerFactory modelInvokerFactory = mock(ModelInvokerFactory.class);
         ChatDataProvider chatDataProvider = mock(ChatDataProvider.class);
 
-        AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider, toolExecutionProvider, messageSender);
-        ChatService chatService = config.chatService(agentAssembler);
+        AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider,
+                toolExecutionProvider, new UserContextThreadVariableHandler(), mock(MessageSender.class));
+        ChatService chatService = config.chatService(agentAssembler, databaseAgentLog);
 
         assertNotNull(chatService);
+    }
+
+    @Test
+    void defaultChatDataCacheProvider_正确创建实例() {
+        DefaultChatDataCacheProvider provider = config.defaultChatDataCacheProvider();
+
+        assertNotNull(provider);
+    }
+
+    @Test
+    void chatDataCacheManager_正确创建并注入日志() {
+        DefaultChatDataCacheProvider provider = config.defaultChatDataCacheProvider();
+        ChatDataCacheManager cacheManager = config.chatDataCacheManager(databaseAgentLog, provider);
+
+        assertNotNull(cacheManager);
+        cacheManager.startCache("session-1", "conv-1");
+        verify(databaseAgentLog).addLog(any(LogData.class));
+    }
+
+    @Test
+    void chatDataCacheManager_DatabaseAgentLog为null时_不设置缓存管理器日志() {
+        DefaultChatDataCacheProvider provider = config.defaultChatDataCacheProvider();
+        ChatDataCacheManager cacheManager = config.chatDataCacheManager(null, provider);
+
+        assertNotNull(cacheManager);
+        cacheManager.startCache("session-1", "conv-1");
+        verify(databaseAgentLog, never()).addLog(any(LogData.class));
     }
 
     @Test
@@ -92,21 +151,22 @@ class AgentContextConfigurationTest {
         ModelInvokerFactory modelInvokerFactory = mock(ModelInvokerFactory.class);
         ChatDataProvider chatDataProvider = mock(ChatDataProvider.class);
 
-        AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider, toolExecutionProvider, messageSender);
+        AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider,
+                toolExecutionProvider, new UserContextThreadVariableHandler(), mock(MessageSender.class));
         ToolExecutionService toolExecutionService = config.toolExecutionService(agentAssembler);
 
         assertNotNull(toolExecutionService);
     }
 
     @Test
-    void systemToolProvider返回的工具Map包含callback_sub_session() {
+    void systemToolProvider不再注册callback_sub_session系统工具() {
         when(applicationContext.getBeansOfType(SystemTool.class)).thenReturn(Map.of());
 
-        var provider = config.systemToolProvider(applicationContext, defaultSubSessionCallback);
+        var provider = config.systemToolProvider(applicationContext);
         Map<String, SystemTool> tools = provider.discoverSystemTools();
 
-        assertTrue(tools.containsKey("callback_sub_session"));
-        assertNotNull(tools.get("callback_sub_session"));
+        assertTrue(tools.isEmpty());
+        assertFalse(tools.containsKey("callback_sub_session"));
     }
 
     @Test
@@ -116,12 +176,12 @@ class AgentContextConfigurationTest {
         when(applicationContext.getBeansOfType(SystemTool.class))
                 .thenReturn(Map.of("myCustomTool", mockTool));
 
-        var provider = config.systemToolProvider(applicationContext, defaultSubSessionCallback);
+        var provider = config.systemToolProvider(applicationContext);
         Map<String, SystemTool> tools = provider.discoverSystemTools();
 
         assertTrue(tools.containsKey("my_custom_tool"));
-        assertTrue(tools.containsKey("callback_sub_session"));
-        assertEquals(2, tools.size());
+        assertFalse(tools.containsKey("callback_sub_session"));
+        assertEquals(1, tools.size());
     }
 
     @Test
@@ -131,12 +191,11 @@ class AgentContextConfigurationTest {
         when(applicationContext.getBeansOfType(SystemTool.class))
                 .thenReturn(Map.of("nullNameTool", nullNameTool));
 
-        var provider = config.systemToolProvider(applicationContext, defaultSubSessionCallback);
+        var provider = config.systemToolProvider(applicationContext);
         Map<String, SystemTool> tools = provider.discoverSystemTools();
 
         assertFalse(tools.containsKey(null));
-        assertTrue(tools.containsKey("callback_sub_session"));
-        assertEquals(1, tools.size());
+        assertTrue(tools.isEmpty());
     }
 
     @Test
@@ -146,10 +205,9 @@ class AgentContextConfigurationTest {
         when(applicationContext.getBeansOfType(SystemTool.class))
                 .thenReturn(Map.of("blankNameTool", blankNameTool));
 
-        var provider = config.systemToolProvider(applicationContext, defaultSubSessionCallback);
+        var provider = config.systemToolProvider(applicationContext);
         Map<String, SystemTool> tools = provider.discoverSystemTools();
 
-        assertTrue(tools.containsKey("callback_sub_session"));
-        assertEquals(1, tools.size());
+        assertTrue(tools.isEmpty());
     }
 }

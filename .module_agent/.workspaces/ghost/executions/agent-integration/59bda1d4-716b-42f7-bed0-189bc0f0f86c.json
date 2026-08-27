@@ -1,0 +1,12 @@
+[
+  {
+    "plan_id": "plan_8bd92758-141a-48a3-ae73-e0be12ff5c46",
+    "plan": "可用技能列表提示词 HOOK 实现",
+    "modified_files": [
+      "agent-integration/src/main/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHook.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHookTest.java"
+    ],
+    "summary": "执行总结：本轮新增 2 个文件——AvailableSkillsSystemHook.java（实现 SystemHook<SystemPromptHookData, SystemPromptHookResult>，getPhase=AFTER_PRE_SYSTEM_PROMPT_BUILD；execute 先判断工具定义列表含 _sys_load_skills 工具（否则返回 null），再遍历 ctx.getSkills()（null 安全）构建可用技能列表（主会话跳过 CHILD 技能，空则返回 null），提示词文本逐字复刻原 ChatService.buildContextSystemInfo 逻辑并返回 SystemPromptHookResult；无 Spring 依赖可直接 new）与 AvailableSkillsSystemHookTest.java（15 个用例）。首轮离朱测试发现 1 个失败用例（空白描述被 isEmpty 误判为有描述），已按推荐方案将判定改为 isBlank() 修复，重测全部通过。\n测试总结：全部测试通过。mvn -B -pl agent-integration -am test（Java 21/Maven 3.9.16）：agent-base + agent-integration 编译 SUCCESS；agent-integration 全量 249 run / 0 failure / 0 error / 0 skipped，BUILD SUCCESS；新增 AvailableSkillsSystemHookTest 15/15 通过，既有 17 个测试类无回归。无环境问题。",
+    "errors": []
+  }
+]

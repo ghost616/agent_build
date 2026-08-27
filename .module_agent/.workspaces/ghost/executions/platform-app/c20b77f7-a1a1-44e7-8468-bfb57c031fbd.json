@@ -10,5 +10,15 @@
     ],
     "summary": "执行总结：本轮共修改 4 个文件——1) DefaultChatDataProvider.java：新增注入 ToolDataProvider/AgentSkillMapper/SkillConfigMapper；getPreSystemPrompt 重构：WS 子会话返回原 WEB_SOCKET_SUB_SESSION_PRE_SYSTEM_PROMPT（行为不变）；主会话（isChild 非 true）经 getSessionToolIds+getToolById 重建工具权限（CHILD→仅子会话可用、null/ALL→均可用，含 callback_sub_session 等内置工具）、AgentSkillMapper+SkillConfigMapper 重建技能权限（仅 ENABLED），文本严格复刻原 buildContextSystemInfo 权限说明（头段+四分组 name: description+两段结尾引导语），无分组项返回 null；子会话非 WS/会话不存在/sessionId 无效返回 null。2) AgentContextConfiguration.java：defaultChatDataProvider 工厂方法新增 3 个参数。3) DefaultChatDataProviderTest.java：适配 7 参构造器（新增 3 mock + AgentSkill TableInfo 初始化），新增 8 个权限说明用例。4) AgentContextConfigurationTest.java：适配工厂调用。模块元数据已更新（update_spec 会话管理/update_definition/append_history）。\n测试总结：全部测试通过。编译测试：mvn -pl platform-app -am compile BUILD SUCCESS（exit 0，reactor 5 模块全部 SUCCESS）；单元测试 DefaultChatDataProviderTest 22/22 通过（0 失败 0 错误 0 跳过）+ AgentContextConfigurationTest 12/12 通过（0 失败 0 错误 0 跳过），合计 34/34。离朱修复 2 处测试代码缺陷（SkillConfig.id 继承自 BaseEntity 导致 Lombok @Builder 无父类字段 builder 方法，enabledSkill 辅助方法与禁用技能用例改为 builder 后 setId，仅改测试文件未动产品代码）。环境无阻塞问题（settings.xml snapshotPolicy 警告、byte-buddy 警告均无影响；66 个预存测试问题与本次变更无关，本次仅运行相关测试类未受影响）。",
     "errors": []
+  },
+  {
+    "plan_id": "plan_1f8145b8-46ac-4e60-b9ce-f6c3828f97fc",
+    "plan": "可用技能列表 HOOK 注册（platform-app）：1) AgentContextConfiguration 新增 @Bean AvailableSkillsSystemHook；2) AgentContextConfigurationTest 新增断言；3) 编译与相关测试。",
+    "modified_files": [
+      "platform-app/src/main/java/com/ghost616/platform/config/AgentContextConfiguration.java",
+      "platform-app/src/test/java/com/ghost616/platform/config/AgentContextConfigurationTest.java"
+    ],
+    "summary": "执行总结：本轮共修改 2 个文件——1) AgentContextConfiguration.java：新增 import com.ghost616.agentinteg.hook.AvailableSkillsSystemHook 与 @Bean availableSkillsSystemHook()（无参 new，实现 SystemHook→HookInvoker，getPhase=AFTER_PRE_SYSTEM_PROMPT_BUILD），注册为 Spring Bean 供 DefaultChatDataProvider.getHooks()（getBeansOfType(HookInvoker.class)）自动收集进聊天流程；2) AgentContextConfigurationTest.java：新增 2 个用例——availableSkillsSystemHook_正确创建为HookInvoker（Bean 非 null + assertInstanceOf(HookInvoker.class) + assertSame(AvailableSkillsSystemHook.class)）与 defaultChatDataProvider_getHooks_收集AvailableSkillsSystemHook（mock getBeansOfType 返回含该 hook 的 map，断言 provider.getHooks() 包含，验证被自动收集）。模块元数据已更新（update_spec 会话管理/update_definition/append_history）。\n测试总结：全部测试通过。编译测试：mvn -pl platform-app -am compile → BUILD SUCCESS（reactor 5 模块全 SUCCESS，EXITCODE=0，接口继承链 SystemHook→HookInvoker 已确认）；单元测试 AgentContextConfigurationTest 14/14 通过（12 既有 + 2 新增，0 失败 0 跳过）+ DefaultChatDataProviderTest 回归 22/22 通过，合计 36/36。环境无阻塞问题（settings.xml snapshotPolicy 警告、javac Lombok 提示等均无影响；66 个预存测试问题与本次变更无关，本次以 -am reactor 模式从源码构建 agent-integration 未受旧 jar 影响）。",
+    "errors": []
   }
 ]

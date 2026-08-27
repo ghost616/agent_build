@@ -148,11 +148,11 @@ class ChatServiceFilteringTest {
     }
 
     @Nested
-    @DisplayName("Section 1: 可用技能列表已 HOOK 化（不再由 ChatService 生成）")
+    @DisplayName("Section 1: 可用技能列表过滤（第160-179行）")
     class SkillsFilteringTest {
 
         @Test
-        @DisplayName("存在 CHILD/PARENT/ALL/null 技能时，ChatService 不再生成可用技能列表消息（迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK）")
+        @DisplayName("主会话时，sessionAuth == CHILD 的技能应从技能列表消息中过滤")
         void mainSession_shouldFilterChildSkills() {
             SkillConfigDTO childSkill = SkillConfigDTO.builder()
                     .name("child_only").sessionAuth(SessionAuthType.CHILD).description("child desc").build();
@@ -168,11 +168,15 @@ class ChatServiceFilteringTest {
             var captured = executeChat("1", harness);
 
             String skillsContent = findMessageByContent(getSystemMessages(captured), "可用的技能");
-            assertNull(skillsContent, "移除可用技能列表生成后，ChatService 不应再生成技能列表消息");
+            assertNotNull(skillsContent, "应有技能列表消息");
+            assertTrue(skillsContent.contains("parent_only"), "应包含 PARENT 权限的技能");
+            assertTrue(skillsContent.contains("all_skill"), "应包含 ALL 权限的技能");
+            assertTrue(skillsContent.contains("null_auth"), "应包含 null 权限的技能");
+            assertFalse(skillsContent.contains("child_only"), "不应包含 CHILD 权限的技能");
         }
 
         @Test
-        @DisplayName("存在 PARENT/null 技能时，ChatService 不再生成可用技能列表消息")
+        @DisplayName("主会话时，sessionAuth 为 null/ALL/PARENT 的技能应正常显示")
         void mainSession_shouldIncludeParentAllAndNullSkills() {
             SkillConfigDTO parentSkill = SkillConfigDTO.builder()
                     .name("parent_skill").sessionAuth(SessionAuthType.PARENT).build();
@@ -184,11 +188,13 @@ class ChatServiceFilteringTest {
             var captured = executeChat("1", harness);
 
             String skillsContent = findMessageByContent(getSystemMessages(captured), "可用的技能");
-            assertNull(skillsContent, "移除可用技能列表生成后，ChatService 不应再生成技能列表消息");
+            assertNotNull(skillsContent);
+            assertTrue(skillsContent.contains("parent_skill"));
+            assertTrue(skillsContent.contains("null_skill"));
         }
 
         @Test
-        @DisplayName("非主会话（子会话）时，ChatService 不再生成可用技能列表消息")
+        @DisplayName("非主会话（子会话）时，不过滤任何技能")
         void childSession_shouldNotFilterSkills() {
             SkillConfigDTO childSkill = SkillConfigDTO.builder()
                     .name("child_skill").sessionAuth(SessionAuthType.CHILD).build();
@@ -200,7 +206,9 @@ class ChatServiceFilteringTest {
             var captured = executeChat("1", harness);
 
             String skillsContent = findMessageByContent(getSystemMessages(captured), "可用的技能");
-            assertNull(skillsContent, "移除可用技能列表生成后，ChatService 不应再生成技能列表消息");
+            assertNotNull(skillsContent);
+            assertTrue(skillsContent.contains("child_skill"), "子会话应显示 CHILD 技能");
+            assertTrue(skillsContent.contains("parent_skill"), "子会话应显示 PARENT 技能");
         }
 
         @Test

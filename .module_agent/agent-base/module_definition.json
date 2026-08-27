@@ -700,6 +700,18 @@
     {
       "path": "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookInvokerWrapperTest.java",
       "description": "HookInvokerWrapper 单元测试：覆盖 getPhase/getIndex 委托（系统 HOOK 与非系统 HOOK）、supports 匹配/不匹配/dataType 为 null 放行、execute 委托原始 Hook 执行并透传结果（含返回 null 场景）。"
+    },
+    {
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookResult.java",
+      "description": "前置系统提示词构建 HOOK 执行结果（implements HookResult）：携带 final String systemPrompt 字段并提供 getSystemPrompt() 访问，由 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段 HOOK 返回，供 ChatService 注入额外的前置系统提示词（chatCompletions 构建 role=system 消息、Responses 系列拼入 instructions）。"
+    },
+    {
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookData.java",
+      "description": "前置系统提示词构建数据载体（implements HookData<SystemPromptHookResult>）：构造参数为 List<ToolDefinition>，内部做防御性深拷贝（列表复制 + 单个 ToolDefinition 用 builder 重建 name/description + parameters Map 新建 HashMap 拷贝，null 视为空列表），getToolDefinitions() 返回不可变副本；由 ChatService 在 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段携带系统工具定义列表供 HOOK 消费以生成可用技能/工具相关提示词。"
+    },
+    {
+      "path": "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookDataTest.java",
+      "description": "SystemPromptHookData 防御性深拷贝行为测试：null 输入视为空列表、列表复制、单个元素 builder 重建、parameters Map 拷贝、返回列表不可变，以及 SystemPromptHookResult.getSystemPrompt 访问器。"
     }
   ]
 }

@@ -14,11 +14,8 @@ import com.ghost616.agentbase.enums.HookPhase;
 import com.ghost616.agentbase.enums.RequestType;
 import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
-import com.ghost616.agentbase.service.agent.invoker.HookResult;
 import com.ghost616.agentbase.service.agent.invoker.HistoryQuerySystemTool;
 import com.ghost616.agentbase.service.agent.invoker.LoadSkillsSystemTool;
-import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookData;
-import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookResult;
 import com.ghost616.agentbase.service.agent.invoker.SystemToolManager;
 import com.ghost616.agentbase.service.agent.invoker.ToolManager;
 import com.ghost616.agentbase.service.model.invoker.ModelInvoker;
@@ -40,7 +37,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -205,7 +201,7 @@ class ChatServiceResponsesTest {
     }
 
     @Test
-    @DisplayName("requestType=responses 时，instructions 不再包含可用技能列表（已迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK）")
+    @DisplayName("requestType=responses 时，instructions 应包含可用技能列表")
     void responses_instructions应包含可用技能列表() {
         SkillConfigDTO availableSkill = SkillConfigDTO.builder()
                 .name("available_skill")
@@ -222,8 +218,9 @@ class ChatServiceResponsesTest {
         com.ghost616.agentbase.dto.model.ChatRequest captured =
                 executeChat(apiRequest, harness, RequestType.RESPONSES.getCode(), Flux.empty());
 
-        assertFalse(captured.getInstructions().contains("可用的技能"),
-                "移除可用技能列表生成后，instructions 不应包含技能列表提示");
+        assertTrue(captured.getInstructions().contains("可用的技能"),
+                "instructions 应包含可用技能列表提示");
+        assertTrue(captured.getInstructions().contains("available_skill"));
     }
 
     @Test
@@ -826,53 +823,5 @@ class ChatServiceResponsesTest {
 
         assertEquals("SYSTEM_PROMPT_TEXT", captured.getInstructions(),
                 "null 提示词不注入时 instructions 应仅为 systemPrompt");
-    }
-
-    @Test
-    @DisplayName("requestType=responses 时，AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK 返回的提示词拼入 instructions（systemPrompt 之后）")
-    void responses_AFTER_PRE_SYSTEM_PROMPT_BUILD结果拼入instructions() {
-        TestHarness harness = new TestHarness("SYSTEM_PROMPT_TEXT", List.of(), List.of(), null, List.of());
-        when(systemToolManager.getToolDefinitions()).thenReturn(List.of());
-        lenient().when(hookManager.triggerHooks(eq(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD), eq(harness.context), any(SystemPromptHookData.class)))
-                .thenReturn(List.of(new SystemPromptHookResult("HOOK_PROMPT")));
-        when(hookManager.castHookResult(any(HookResult.class), eq(SystemPromptHookResult.class)))
-                .thenAnswer(inv -> {
-                    HookResult result = inv.getArgument(0);
-                    return result instanceof SystemPromptHookResult ? (SystemPromptHookResult) result : null;
-                });
-
-        ChatRequest apiRequest = ChatRequest.builder().sessionId(sessionId).content("hello").conversationId("conv-1").build();
-        com.ghost616.agentbase.dto.model.ChatRequest captured =
-                executeChat(apiRequest, harness, RequestType.RESPONSES.getCode(), Flux.empty());
-
-        verify(hookManager).triggerHooks(eq(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD), eq(harness.context), any(SystemPromptHookData.class));
-        String instructions = captured.getInstructions();
-        assertTrue(instructions.contains("HOOK_PROMPT"), "instructions 应包含 HOOK 提示词");
-        assertTrue(instructions.indexOf("HOOK_PROMPT") > instructions.indexOf("SYSTEM_PROMPT_TEXT"),
-                "HOOK 提示词应拼接在 systemPrompt 之后");
-    }
-
-    @Test
-    @DisplayName("requestType=responses_stateless 时，AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK 返回的提示词拼入 instructions")
-    void responsesStateless_AFTER_PRE_SYSTEM_PROMPT_BUILD结果拼入instructions() {
-        TestHarness harness = new TestHarness("SYSTEM_PROMPT_TEXT", List.of(), List.of(), null, List.of());
-        when(systemToolManager.getToolDefinitions()).thenReturn(List.of());
-        lenient().when(hookManager.triggerHooks(eq(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD), eq(harness.context), any(SystemPromptHookData.class)))
-                .thenReturn(List.of(new SystemPromptHookResult("HOOK_PROMPT")));
-        when(hookManager.castHookResult(any(HookResult.class), eq(SystemPromptHookResult.class)))
-                .thenAnswer(inv -> {
-                    HookResult result = inv.getArgument(0);
-                    return result instanceof SystemPromptHookResult ? (SystemPromptHookResult) result : null;
-                });
-
-        ChatRequest apiRequest = ChatRequest.builder().sessionId(sessionId).content("hello").conversationId("conv-1").build();
-        com.ghost616.agentbase.dto.model.ChatRequest captured =
-                executeChat(apiRequest, harness, RequestType.RESPONSES_STATELESS.getCode(), Flux.empty());
-
-        verify(hookManager).triggerHooks(eq(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD), eq(harness.context), any(SystemPromptHookData.class));
-        String instructions = captured.getInstructions();
-        assertTrue(instructions.contains("HOOK_PROMPT"), "instructions 应包含 HOOK 提示词");
-        assertTrue(instructions.indexOf("HOOK_PROMPT") > instructions.indexOf("SYSTEM_PROMPT_TEXT"),
-                "HOOK 提示词应拼接在 systemPrompt 之后");
     }
 }

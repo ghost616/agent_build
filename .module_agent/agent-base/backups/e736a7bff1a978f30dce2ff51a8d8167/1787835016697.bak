@@ -13,9 +13,6 @@ import com.ghost616.agentbase.enums.FinishReason;
 import com.ghost616.agentbase.enums.HookPhase;
 import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
-import com.ghost616.agentbase.service.agent.invoker.HookResult;
-import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookData;
-import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookResult;
 import com.ghost616.agentbase.service.agent.invoker.SystemToolManager;
 import com.ghost616.agentbase.service.agent.invoker.ToolManager;
 import com.ghost616.agentbase.service.model.invoker.ModelInvoker;
@@ -33,7 +30,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -704,64 +700,5 @@ class ChatServiceTest {
         executeChatWithSessionCtx(sessionCtx);
 
         verify(chatDataProvider, times(2)).getPreSystemPrompt(sessionId);
-    }
-
-    @Test
-    void chatCompletions_AFTER_PRE_SYSTEM_PROMPT_BUILD触发且结果注入到preSystemPrompt之后history之前() {
-        when(chatDataProvider.getPreSystemPrompt(sessionId)).thenReturn("PRE_PROMPT");
-        lenient().when(hookManager.triggerHooks(eq(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD), eq(context), any(SystemPromptHookData.class)))
-                .thenReturn(List.of(new SystemPromptHookResult("HOOK_PROMPT")));
-        when(hookManager.castHookResult(any(HookResult.class), eq(SystemPromptHookResult.class)))
-                .thenAnswer(inv -> {
-                    HookResult result = inv.getArgument(0);
-                    return result instanceof SystemPromptHookResult ? (SystemPromptHookResult) result : null;
-                });
-
-        List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
-        history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
-        com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
-
-        verify(hookManager).triggerHooks(eq(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD), eq(context), any(SystemPromptHookData.class));
-        List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
-        assertEquals("PRE_PROMPT", contents.get(1), "HOOK 提示词应位于 preSystemPrompt 之后");
-        int hookIdx = contents.indexOf("HOOK_PROMPT");
-        int preIdx = contents.indexOf("PRE_PROMPT");
-        int userIdx = contents.indexOf("hello");
-        assertTrue(hookIdx > preIdx && hookIdx < userIdx,
-                "HOOK 提示词应注入在 preSystemPrompt 消息之后、history 之前");
-        assertEquals("system", captured.getMessages().get(hookIdx).getRole(), "HOOK 提示词消息角色应为 system");
-    }
-
-    @Test
-    void chatCompletions_HOOK返回null或空白提示词时跳过注入() {
-        lenient().when(hookManager.triggerHooks(eq(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD), eq(context), any(SystemPromptHookData.class)))
-                .thenReturn(List.of(new SystemPromptHookResult(null), new SystemPromptHookResult("   ")));
-        when(hookManager.castHookResult(any(HookResult.class), eq(SystemPromptHookResult.class)))
-                .thenAnswer(inv -> {
-                    HookResult result = inv.getArgument(0);
-                    return result instanceof SystemPromptHookResult ? (SystemPromptHookResult) result : null;
-                });
-
-        List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
-        history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
-        com.ghost616.agentbase.dto.model.ChatRequest captured = executeFoldChat(history, 3, null);
-
-        List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
-        assertFalse(contents.contains("   "), "空白 HOOK 提示词不应注入");
-        assertEquals("hello", contents.get(contents.size() - 1), "最后一条消息仍为 user 消息");
-    }
-
-    @Test
-    void chatCompletions_HOOK触发异常不中断主流程() {
-        lenient().when(hookManager.triggerHooks(eq(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD), eq(context), any(SystemPromptHookData.class)))
-                .thenThrow(new RuntimeException("hook failure"));
-
-        List<AgentExecutionContext.HistoryEntry> history = new ArrayList<>();
-        history.add(new AgentExecutionContext.HistoryEntry(
-                "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
-        assertDoesNotThrow(() -> executeFoldChat(history, 3, null));
-        verify(modelInvoker).invokeStream(any());
     }
 }

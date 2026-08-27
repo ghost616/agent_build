@@ -1,0 +1,10 @@
+{
+  "plan_id": "plan_8bd92758-141a-48a3-ae73-e0be12ff5c46",
+  "module_name": "agent-integration",
+  "development_plan": "可用技能列表提示词 HOOK 实现（agent-integration，依赖 agent-base 新增的 SystemPromptHookData/SystemPromptHookResult/AFTER_PRE_SYSTEM_PROMPT_BUILD）：\n1. 新增 AvailableSkillsSystemHook implements SystemHook<SystemPromptHookData, SystemPromptHookResult>（无 Spring 依赖，直接 new 即可）：\n   a. getPhase() 返回 HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD。\n   b. execute(AgentExecutionContext ctx, SystemPromptHookData data)：\n      - 先判断 hasLoadSkillsTool：data.getToolDefinitions() 中是否存在 LoadSkillsSystemTool.FULL_TOOL_NAME 同名工具定义，不存在返回 null。\n      - 复用原始逻辑构建技能列表：遍历 ctx.getSkills()（null 安全），主会话（ctx.isMainSession()）跳过 sessionAuth==CHILD 的技能，收集 availableSkills；空则返回 null。\n      - 文本逐字复刻原 ChatService.buildContextSystemInfo 逻辑：\"以下是可用的技能（SKILL）列表（技能本身不是工具，需先加载再使用其关联的工具）：\\n\" + 每个技能 \"- name\" 或 \"- name: description\\n\" + \"\\n请使用 \" + LoadSkillsSystemTool.FULL_TOOL_NAME + \" 系统工具加载所需技能。加载后，该技能的关联工具将变为可用，届时再调用具体工具。禁止直接以技能名称作为工具调用。\"\n      - 返回 new SystemPromptHookResult(文本)。\n2. 新增 AvailableSkillsSystemHookTest：hasLoadSkillsTool 存在/缺失分支；技能列表构建（含描述/不含描述、主会话过滤 CHILD）；空技能返回 null；文本断言。\n3. 运行 agent-integration 模块 Maven 编译与全部测试，确保全部通过。",
+  "session_id": "59bda1d4-716b-42f7-bed0-189bc0f0f86c",
+  "modified_files": [
+    "agent-integration/src/main/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHook.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHookTest.java"
+  ]
+}

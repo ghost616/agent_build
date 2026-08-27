@@ -17,6 +17,7 @@ import com.ghost616.agentbase.service.model.invoker.ModelInvokerManager;
 import com.ghost616.agentbase.service.agent.ToolExecutionProvider;
 import com.ghost616.agentbase.sendmessage.MessageSender;
 import com.ghost616.agentinteg.AgentAssembler;
+import com.ghost616.agentinteg.hook.AvailableSkillsSystemHook;
 import com.ghost616.agentinteg.model.invoker.DefaultModelInvokerFactory;
 import com.ghost616.agentinteg.hook.SubSessionResultFallbackHook;
 import com.ghost616.agentinteg.hook.SubSessionResultProvider;
@@ -86,6 +87,16 @@ public class AgentContextConfiguration {
     @Bean
     public DefaultToolExecutionProvider toolExecutionProvider() {
         return new DefaultToolExecutionProvider();
+    }
+
+    /**
+     * 可用技能（SKILL）列表提示词 HOOK（agent-integration 提供，无参构造）。
+     * 注册为 Spring Bean 后，由 {@link DefaultChatDataProvider#getHooks()}
+     * （getBeansOfType(HookInvoker.class)）自动收集进聊天流程。
+     */
+    @Bean
+    public AvailableSkillsSystemHook availableSkillsSystemHook() {
+        return new AvailableSkillsSystemHook();
     }
 
     /**

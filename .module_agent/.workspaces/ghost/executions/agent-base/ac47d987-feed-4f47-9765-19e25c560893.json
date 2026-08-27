@@ -12,5 +12,22 @@
     ],
     "summary": "执行总结：本轮共修改 6 个文件——AgentContextManager.java（AgentSessionContext 新增 private volatile String preSystemPrompt 字段与 public preSystemPrompt()/setPreSystemPrompt(String) 访问方法，缓存会话级前置提示词）；ChatService.java（三个路由方法 chatViaChatCompletions/chatViaResponses/chatViaResponsesStateless 签名新增 AgentSessionContext 参数，chat() 传入已构建的 sessionContext；新增私有方法 getPreSystemPrompt(sessionCtx, sessionId) 实现缓存逻辑——preSystemPrompt() 非 null 直接返回、否则调 provider 获取并写入缓存（null 不缓存），三处原 chatDataProvider.getPreSystemPrompt(sessionId) 调用点统一替换；移除 buildContextSystemInfo 中 context.isMainSession() 子会话工具/技能权限说明生成分支（【仅子会话可用】【均可用】分区与引导文案），该功能迁移至 platform-app 的 getPreSystemPrompt 实现，保留技能列表与已加载技能消息逻辑）；测试文件 ChatServiceTest.java（删除 unused isMainSession stub、新增 preSystemPrompt 缓存测试 2 项）、ChatServiceHistoryGroupJsonTest.java（删除 unused isMainSession stub）、ChatServiceFilteringTest.java（Section 3 更新为断言 ChatService 不再生成子会话权限说明）、AgentContextManagerTest.java（新增 preSystemPrompt 访问器测试 2 项）。模块元数据 current_spec.md 与 change_history.log 已同步更新。\n\n测试总结：全部测试通过。离朱测试报告：编译测试 1/1 通过；单元测试 589/589 通过（Failures: 0, Errors: 0, Skipped: 0，74 个测试套件，BUILD SUCCESS）；接口测试/E2E 不适用。覆盖点：preSystemPrompt 初始 null/设置返回/覆盖旧值；三路前置/后置提示词注入位置与空白/null 跳过；首次获取后缓存、同一 sessionCtx 二次请求 provider 仅调用 1 次、provider 返回 null 时不缓存每次均调用；子会话权限说明分支移除后 systemMessages 不再包含该内容且技能过滤/已加载技能逻辑无回归。无环境问题（离朱已排除 PowerShell 管道退出码误报，经 cmd 复核 Maven 退出码为 0）。",
     "errors": []
+  },
+  {
+    "plan_id": "plan_f04927ee-3ce1-4914-9333-529283821842",
+    "plan": "可用技能列表提示词 HOOK 化改造",
+    "modified_files": [
+      "agent-base/src/main/java/com/ghost616/agentbase/enums/HookPhase.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookResult.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookData.java",
+      "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ChatService.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceResponsesTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceFilteringTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookDataTest.java",
+      "agent-base/src/test/java/com/ghost616/agentbase/enums/HookPhaseTest.java"
+    ],
+    "summary": "执行总结：本轮共修改 8 个文件并新增 1 个测试文件——主代码：HookPhase.java（新增 AFTER_PRE_SYSTEM_PROMPT_BUILD 枚举值）；新建 SystemPromptHookResult.java（implements HookResult，final systemPrompt + getSystemPrompt()）；新建 SystemPromptHookData.java（implements HookData<SystemPromptHookResult>，构造参数 List<ToolDefinition>，防御性深拷贝——列表复制 + 单元素 ToolDefinition builder 重建 name/description + parameters Map 新建 HashMap 拷贝，null 视为空列表，getToolDefinitions() 返回不可变副本）；ChatService.java（移除 buildContextSystemInfo 中可用技能列表生成逻辑、保留已加载技能逻辑与 hasLoadSkillsTool 判断；三个路由方法获取 preSystemPrompt 后触发 hookManager.triggerHooks(AFTER_PRE_SYSTEM_PROMPT_BUILD, context, new SystemPromptHookData(systemToolManager.getToolDefinitions()))，新增私有方法 collectSystemPromptHookResults 用 castHookResult 过滤 SystemPromptHookResult 提取非空白提示词，chatCompletions 将结果构建 role=system 消息插入 preSystemPrompt 之后 history 之前，responses/stateless 经 buildInstructions 新增 hookSystemPrompts 参数拼入 systemMessages 同等位置；触发异常不中断主流程）。测试：ChatServiceTest.java（新增 3 项：HOOK 触发注入/空白跳过/异常容错）、ChatServiceResponsesTest.java（新增 2 项 responses/stateless 注入、更新可用技能列表断言）、ChatServiceFilteringTest.java（Section 1 改为断言不再生成技能列表消息）、新建 SystemPromptHookDataTest.java（6 项深拷贝与 Result 访问器测试）、离朱补充新建 HookPhaseTest.java（2 项枚举测试）。模块元数据 current_spec.md（新增\"系统提示词构建 HOOK\" section + ChatService section 追加）、module_definition.json（新增 3 文件条目）、change_history.log 已同步更新。\n\n测试总结：全部测试通过。离朱测试报告：编译测试 1/1 通过；单元测试 602/602 通过（Failures: 0, Errors: 0, Skipped: 0，BUILD SUCCESS，较上轮 589 个新增 13 个：HookPhaseTest 2 + SystemPromptHookDataTest 6 + ChatService 三路 HOOK 集成 5）；接口测试/E2E 不适用。覆盖点：HookPhase 新枚举值；SystemPromptHookResult 访问器；SystemPromptHookData 深拷贝（null 输入/列表复制/单元素重建/parameters Map 拷贝/返回列表不可变）；chatCompletions HOOK 提示词注入位置（preSystemPrompt 之后、history 之前）与空白跳过与异常容错；responses/stateless HOOK 提示词拼入 instructions；ChatService 不再生成可用技能列表消息且已加载技能逻辑无回归。无环境问题（离朱用 PowerShell WriteAllText 规避 write 工具 EISDIR 问题创建 HookPhaseTest）。",
+    "errors": []
   }
 ]

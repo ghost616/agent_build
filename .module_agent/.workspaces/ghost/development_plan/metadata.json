@@ -32,16 +32,24 @@
     "test_passed": true
   },
   {
-    "plan_id": "plan_708c817c-8b52-4175-9581-06cad24c719c",
-    "plan_summary": "子会话权限说明迁移与 preSystemPrompt 缓存（agent-base 侧）",
+    "plan_id": "plan_f04927ee-3ce1-4914-9333-529283821842",
+    "plan_summary": "可用技能列表提示词 HOOK 化改造（agent-base 侧基础设施与 ChatService 集成）",
     "starter_session_id": "54371bc7-e32f-4291-8663-86cd992f101e",
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
   },
   {
-    "plan_id": "plan_36c83a74-d95b-4334-9077-70817118515a",
-    "plan_summary": "子会话权限说明迁移至 getPreSystemPrompt 实现（platform-app 侧）",
+    "plan_id": "plan_8bd92758-141a-48a3-ae73-e0be12ff5c46",
+    "plan_summary": "可用技能列表提示词 HOOK 实现（agent-integration）",
+    "starter_session_id": "54371bc7-e32f-4291-8663-86cd992f101e",
+    "code_reviewed": true,
+    "plan_completed": true,
+    "test_passed": true
+  },
+  {
+    "plan_id": "plan_1f8145b8-46ac-4e60-b9ce-f6c3828f97fc",
+    "plan_summary": "可用技能列表 HOOK 注册（platform-app）",
     "starter_session_id": "54371bc7-e32f-4291-8663-86cd992f101e",
     "code_reviewed": true,
     "plan_completed": true,

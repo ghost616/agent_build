@@ -22,6 +22,9 @@ import reactor.core.publisher.Flux;
 
 import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
+import com.ghost616.agentbase.service.agent.invoker.HookResult;
+import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookData;
+import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookResult;
 import com.ghost616.agentbase.service.agent.log.AgentLog;
 import com.ghost616.agentbase.service.agent.log.ErrorLogData;
 import com.ghost616.agentbase.service.agent.log.HistoryExpandLogData;
@@ -214,7 +217,15 @@ public class ChatService {
         }
 
         List<ToolDefinition> toolDefinitions = systemToolManager.getToolDefinitions();
+        // 前置系统提示词构建后触发 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK，收集返回的提示词注入到系统消息链
+        List<String> hookSystemPrompts = collectSystemPromptHookResults(context);
         ContextSystemInfo systemInfo = buildContextSystemInfo(context, toolDefinitions);
+        for (String hookPrompt : hookSystemPrompts) {
+            messages.add(Message.builder()
+                    .role("system")
+                    .content(hookPrompt)
+                    .build());
+        }
         messages.addAll(systemInfo.systemMessages());
 
         for (AgentExecutionContext.HistoryEntry entry : context.getHistory()) {
@@ -270,8 +281,11 @@ public class ChatService {
         FoldResult foldResult = filterAndFold(input, context);
         input = foldResult.messages();
 
+        String preSystemPrompt = getPreSystemPrompt(sessionCtx, sessionId);
+        // 前置系统提示词构建后触发 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK，收集返回的提示词拼入 instructions
+        List<String> hookSystemPrompts = collectSystemPromptHookResults(context);
         String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages(),
-                getPreSystemPrompt(sessionCtx, sessionId), chatDataProvider.getPostSystemPrompt(sessionId));
+                preSystemPrompt, chatDataProvider.getPostSystemPrompt(sessionId), hookSystemPrompts);
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
@@ -310,8 +324,11 @@ public class ChatService {
         FoldResult foldResult = filterAndFold(input, context);
         input = foldResult.messages();
 
+        String preSystemPrompt = getPreSystemPrompt(sessionCtx, sessionId);
+        // 前置系统提示词构建后触发 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK，收集返回的提示词拼入 instructions
+        List<String> hookSystemPrompts = collectSystemPromptHookResults(context);
         String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages(),
-                getPreSystemPrompt(sessionCtx, sessionId), chatDataProvider.getPostSystemPrompt(sessionId));
+                preSystemPrompt, chatDataProvider.getPostSystemPrompt(sessionId), hookSystemPrompts);
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
@@ -329,6 +346,40 @@ public class ChatService {
         Flux<ChatChunk> stream = invoker.invokeStream(chatRequest);
 
         return toSseStream(stream, context, contextMutator, sessionId);
+    }
+
+    /**
+     * 触发 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段 HOOK，收集返回的 SystemPromptHookResult 提示词列表。
+     *
+     * <p>以当前系统工具定义列表构建 {@link SystemPromptHookData} 作为数据载体；
+     * 对返回的 List&lt;HookResult&gt; 逐个经 {@link HookManager#castHookResult} 过滤
+     * SystemPromptHookResult 实例，提取非空白 systemPrompt 文本（保持注入文本一致）。
+     * 触发失败/异常不中断主流程（HookManager 内部逐 hook 容错，外层再兜底返回空列表）。</p>
+     *
+     * @param context 智能体执行上下文
+     * @return 收集到的 HOOK 提示词列表（可能为空，不返回 null）
+     */
+    private List<String> collectSystemPromptHookResults(AgentExecutionContext context) {
+        try {
+            List<HookResult> hookResults = hookManager.triggerHooks(
+                    HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD, context,
+                    new SystemPromptHookData(systemToolManager.getToolDefinitions()));
+            List<String> prompts = new ArrayList<>();
+            if (hookResults != null) {
+                for (HookResult hookResult : hookResults) {
+                    SystemPromptHookResult promptResult =
+                            hookManager.castHookResult(hookResult, SystemPromptHookResult.class);
+                    if (promptResult != null && promptResult.getSystemPrompt() != null
+                            && !promptResult.getSystemPrompt().isBlank()) {
+                        prompts.add(promptResult.getSystemPrompt());
+                    }
+                }
+            }
+            return prompts;
+        } catch (Exception e) {
+            log.warn("触发 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK 失败，跳过提示词注入: {}", e.getMessage(), e);
+            return List.of();
+        }
     }
 
     /**
@@ -352,7 +403,8 @@ public class ChatService {
             List<Message> loadedSkillMessages,
             List<Message> anchorMessages,
             String preSystemPrompt,
-            String postSystemPrompt) {
+            String postSystemPrompt,
+            List<String> hookSystemPrompts) {
         StringBuilder instructions = new StringBuilder();
         String systemPrompt = context.getSystemPrompt();
         if (systemPrompt != null) {
@@ -371,6 +423,18 @@ public class ChatService {
                     instructions.append("\n\n");
                 }
                 instructions.append(content);
+            }
+        }
+        // AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK 返回的提示词与 systemInfo.systemMessages() 同等地位
+        // （紧随系统信息之后、已加载技能之前追加）
+        if (hookSystemPrompts != null) {
+            for (String hookPrompt : hookSystemPrompts) {
+                if (hookPrompt != null && !hookPrompt.isEmpty()) {
+                    if (instructions.length() > 0) {
+                        instructions.append("\n\n");
+                    }
+                    instructions.append(hookPrompt);
+                }
             }
         }
         for (Message skillMessage : loadedSkillMessages) {
@@ -469,31 +533,9 @@ public class ChatService {
         List<SkillConfigDTO> filteredLoadedSkills = new ArrayList<>();
 
         if (hasLoadSkillsTool) {
-            List<SkillConfigDTO> availableSkills = new ArrayList<>();
-            if (skills != null) {
-                for (SkillConfigDTO skill : skills) {
-                    if (context.isMainSession() && skill.getSessionAuth() == SessionAuthType.CHILD) {
-                        continue;
-                    }
-                    availableSkills.add(skill);
-                }
-            }
-            if (!availableSkills.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("以下是可用的技能（SKILL）列表（技能本身不是工具，需先加载再使用其关联的工具）：\n");
-                for (SkillConfigDTO skill : availableSkills) {
-                    sb.append("- ").append(skill.getName());
-                    if (skill.getDescription() != null && !skill.getDescription().isEmpty()) {
-                        sb.append(": ").append(skill.getDescription());
-                    }
-                    sb.append("\n");
-                }
-                sb.append("\n请使用 ").append(LoadSkillsSystemTool.FULL_TOOL_NAME).append(" 系统工具加载所需技能。加载后，该技能的关联工具将变为可用，届时再调用具体工具。禁止直接以技能名称作为工具调用。");
-                systemMessages.add(Message.builder()
-                        .role("system")
-                        .content(sb.toString())
-                        .build());
-            }
+            // 可用技能（SKILL）列表提示词生成逻辑已迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段 HOOK
+            // （通过 SystemPromptHookData 携带工具定义列表、SystemPromptHookResult 回传提示词），
+            // 此处仅保留已加载技能逻辑。
 
             List<SkillConfigDTO> loadedSkills = parseLoadedSkills(context, skills);
             for (SkillConfigDTO skill : loadedSkills) {

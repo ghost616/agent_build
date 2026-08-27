@@ -1,0 +1,17 @@
+{
+  "plan_id": "plan_f04927ee-3ce1-4914-9333-529283821842",
+  "module_name": "agent-base",
+  "development_plan": "可用技能列表提示词 HOOK 化改造（agent-base 侧基础设施与 ChatService 集成）：\n1. HookPhase 枚举新增 AFTER_PRE_SYSTEM_PROMPT_BUILD（PreSystemPrompt 构建后触发）。\n2. 新增 SystemPromptHookResult implements HookResult：携带 final String systemPrompt 字段，提供 getSystemPrompt() 访问。\n3. 新增 SystemPromptHookData implements HookData<SystemPromptHookResult>：构造参数 List<ToolDefinition>，内部做防御性深拷贝——列表复制 + 单个 ToolDefinition 用 builder 重建（name/description 拷贝，parameters Map 新建 HashMap 拷贝）；提供 getToolDefinitions() 访问；toolDefinitions 为 null 时视为空列表。\n4. ChatService 改造：\n   a. 移除 buildContextSystemInfo 中\"可用技能（SKILL）列表\"生成逻辑（即原 hasLoadSkillsTool 分支中生成 systemMessages 技能列表提示词的部分），保留\"已加载技能\"逻辑（parseLoadedSkills → filteredLoadedSkills 数据回传与 loadedSkillMessages 提示词），hasLoadSkillsTool 判断继续用于该保留部分。\n   b. 三个路由方法（chatViaChatCompletions/chatViaResponses/chatViaResponsesStateless）在获取 preSystemPrompt 后触发 hookManager.triggerHooks(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD, context, new SystemPromptHookData(systemToolManager.getToolDefinitions()))，收集返回的 List<HookResult>，用 castHookResult 过滤 SystemPromptHookResult 实例：chatViaChatCompletions 将每个结果的 systemPrompt 构建 role=system 消息追加到 messages（preSystemPrompt 消息之后、history 之前）；chatViaResponses/chatViaResponsesStateless 将每个结果的 systemPrompt 拼入 buildInstructions（与 systemInfo.systemMessages() 同等地位，具体可通过新增参数或拼接方式实现，保持提示文本一致）。\n   c. 触发失败/异常不中断主流程（遵循 HookManager 既有容错）。\n5. 适配 agent-base 受影响测试（ChatServiceTest、ChatServiceResponsesTest、ChatServiceFilteringTest、ChatServiceNoLoadSkillsTest、ChatServiceLogTest 等）：技能列表消息断言调整（不再出现在 systemMessages 中，改由新阶段 HOOK 结果注入）；新增用例覆盖 AFTER_PRE_SYSTEM_PROMPT_BUILD 触发与 SystemPromptHookResult 注入消息链；SystemPromptHookData 深拷贝测试（列表复制、单个元素复制、parameters Map 拷贝、null 输入）。\n6. 运行 agent-base 模块 Maven 编译与全部测试，确保全部通过。",
+  "session_id": "ac47d987-feed-4f47-9765-19e25c560893",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/enums/HookPhase.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookResult.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookData.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ChatService.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceResponsesTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceFilteringTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookDataTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/enums/HookPhaseTest.java"
+  ]
+}
