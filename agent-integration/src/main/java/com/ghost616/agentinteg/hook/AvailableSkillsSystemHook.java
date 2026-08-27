@@ -14,17 +14,25 @@ import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookData;
 import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookResult;
 
 /**
- * 可用技能（SKILL）列表提示词 HOOK。
+ * 可用技能（SKILL）列表与已加载技能提示词 HOOK。
  *
  * <p>实现 {@link SystemHook}{@code <SystemPromptHookData, SystemPromptHookResult>}，
  * getPhase 返回 AFTER_PRE_SYSTEM_PROMPT_BUILD，由 HookManager 在
  * {@code triggerHooks(phase)} 中按 phase 分发。当系统工具定义列表包含加载技能工具
- * （{@link LoadSkillsSystemTool#FULL_TOOL_NAME}）时，生成"可用技能列表"提示词
- * （逐字复刻原 ChatService.buildContextSystemInfo 逻辑），提示模型技能本身不是工具、
- * 需先经 load_skills 系统工具加载后再调用其关联工具。</p>
+ * （{@link LoadSkillsSystemTool#FULL_TOOL_NAME}）时，生成两段提示词并拼接为一个
+ * {@link SystemPromptHookResult} 返回：</p>
  *
- * <p>工具定义列表不含加载技能工具、技能列表为空、或主会话过滤 CHILD 技能后为空时
- * 一律返回 null（静默跳过），不影响原有流程。无 Spring 依赖，可直接 new 使用。</p>
+ * <ul>
+ *   <li>可用技能列表段（在前）：逐字复刻原 ChatService.buildContextSystemInfo 逻辑，
+ *       提示模型技能本身不是工具、需先经 load_skills 系统工具加载后再调用其关联工具；</li>
+ *   <li>已加载技能段（在后）：从会话变量（{@link LoadSkillsSystemTool#SESSION_KEY}）
+ *       读取已加载技能名并经 {@link LoadedSkillsHelper} 过滤（主会话跳过 CHILD 技能），
+ *       生成"以下技能已加载，请按照其提示词指导执行任务"提示词。</li>
+ * </ul>
+ *
+ * <p>工具定义列表不含加载技能工具时返回 null；无可用技能但有已加载技能时仅返回
+ * 已加载段；两者皆无返回 null（静默跳过），不影响原有流程。无 Spring 依赖，
+ * 可直接 new 使用。</p>
  *
  * @author ghost616
  */
@@ -33,6 +41,9 @@ public class AvailableSkillsSystemHook implements SystemHook<SystemPromptHookDat
     /** 可用技能列表提示词固定开头 */
     private static final String SKILLS_LIST_HEADER =
             "以下是可用的技能（SKILL）列表（技能本身不是工具，需先加载再使用其关联的工具）：\n";
+
+    /** 已加载技能提示词固定开头 */
+    private static final String LOADED_SKILLS_HEADER = "以下技能已加载，请按照其提示词指导执行任务：\n\n";
 
     @Override
     public HookPhase getPhase() {
@@ -44,11 +55,22 @@ public class AvailableSkillsSystemHook implements SystemHook<SystemPromptHookDat
         if (ctx == null || data == null || !hasLoadSkillsTool(data.getToolDefinitions())) {
             return null;
         }
-        List<SkillConfigDTO> availableSkills = collectAvailableSkills(ctx);
-        if (availableSkills.isEmpty()) {
+        String availablePrompt = buildAvailableSkillsPrompt(collectAvailableSkills(ctx));
+        String loadedPrompt = buildLoadedSkillsPrompt(LoadedSkillsHelper.collectLoadedSkills(ctx));
+        if (availablePrompt == null && loadedPrompt == null) {
             return null;
         }
-        return new SystemPromptHookResult(buildSkillsPrompt(availableSkills));
+        StringBuilder sb = new StringBuilder();
+        if (availablePrompt != null) {
+            sb.append(availablePrompt);
+        }
+        if (loadedPrompt != null) {
+            if (sb.length() > 0) {
+                sb.append("\n\n");
+            }
+            sb.append(loadedPrompt);
+        }
+        return new SystemPromptHookResult(sb.toString());
     }
 
     /**
@@ -91,10 +113,13 @@ public class AvailableSkillsSystemHook implements SystemHook<SystemPromptHookDat
     /**
      * 构建可用技能列表提示词文本（逐字复刻原 ChatService.buildContextSystemInfo 逻辑）。
      *
-     * @param availableSkills 可用技能列表（非空）
-     * @return 提示词文本
+     * @param availableSkills 可用技能列表（可能为空）
+     * @return 可用技能列表提示词；列表为空时返回 null
      */
-    private String buildSkillsPrompt(List<SkillConfigDTO> availableSkills) {
+    private String buildAvailableSkillsPrompt(List<SkillConfigDTO> availableSkills) {
+        if (availableSkills.isEmpty()) {
+            return null;
+        }
         StringBuilder sb = new StringBuilder();
         sb.append(SKILLS_LIST_HEADER);
         for (SkillConfigDTO skill : availableSkills) {
@@ -106,6 +131,27 @@ public class AvailableSkillsSystemHook implements SystemHook<SystemPromptHookDat
         }
         sb.append("\n请使用 ").append(LoadSkillsSystemTool.FULL_TOOL_NAME)
                 .append(" 系统工具加载所需技能。加载后，该技能的关联工具将变为可用，届时再调用具体工具。禁止直接以技能名称作为工具调用。");
+        return sb.toString();
+    }
+
+    /**
+     * 构建已加载技能提示词文本（逐字复刻原 ChatService.buildContextSystemInfo 逻辑）。
+     *
+     * @param loadedSkills 已加载技能列表（可能为空）
+     * @return 已加载技能提示词；列表为空时返回 null
+     */
+    private String buildLoadedSkillsPrompt(List<SkillConfigDTO> loadedSkills) {
+        if (loadedSkills.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(LOADED_SKILLS_HEADER);
+        for (SkillConfigDTO skill : loadedSkills) {
+            sb.append("## ").append(skill.getName()).append("\n");
+            if (skill.getPrompt() != null && !skill.getPrompt().isEmpty()) {
+                sb.append(skill.getPrompt()).append("\n\n");
+            }
+        }
         return sb.toString();
     }
 }

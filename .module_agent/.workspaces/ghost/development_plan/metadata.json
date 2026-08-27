@@ -32,24 +32,24 @@
     "test_passed": true
   },
   {
-    "plan_id": "plan_f04927ee-3ce1-4914-9333-529283821842",
-    "plan_summary": "可用技能列表提示词 HOOK 化改造（agent-base 侧基础设施与 ChatService 集成）",
+    "plan_id": "plan_22b7f827-a2d9-421f-a14e-068b93d0d3f5",
+    "plan_summary": "工具列表 HOOK 化与 buildContextSystemInfo 删除（agent-base 侧）",
     "starter_session_id": "54371bc7-e32f-4291-8663-86cd992f101e",
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
   },
   {
-    "plan_id": "plan_8bd92758-141a-48a3-ae73-e0be12ff5c46",
-    "plan_summary": "可用技能列表提示词 HOOK 实现（agent-integration）",
+    "plan_id": "plan_bf9df230-9798-48bb-9a4e-d975ca555a9d",
+    "plan_summary": "已加载技能提示词扩展与工具处理 HOOK 实现（agent-integration）",
     "starter_session_id": "54371bc7-e32f-4291-8663-86cd992f101e",
     "code_reviewed": true,
     "plan_completed": true,
     "test_passed": true
   },
   {
-    "plan_id": "plan_1f8145b8-46ac-4e60-b9ce-f6c3828f97fc",
-    "plan_summary": "可用技能列表 HOOK 注册（platform-app）",
+    "plan_id": "plan_c7cddb8a-2df0-4ca2-8c63-96a75482bb04",
+    "plan_summary": "工具处理 HOOK 注册（platform-app）",
     "starter_session_id": "54371bc7-e32f-4291-8663-86cd992f101e",
     "code_reviewed": true,
     "plan_completed": true,

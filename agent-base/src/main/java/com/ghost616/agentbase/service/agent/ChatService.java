@@ -25,6 +25,8 @@ import com.ghost616.agentbase.service.agent.invoker.HookManager;
 import com.ghost616.agentbase.service.agent.invoker.HookResult;
 import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookData;
 import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookResult;
+import com.ghost616.agentbase.service.agent.invoker.ToolDefinitionsHookData;
+import com.ghost616.agentbase.service.agent.invoker.ToolDefinitionsHookResult;
 import com.ghost616.agentbase.service.agent.log.AgentLog;
 import com.ghost616.agentbase.service.agent.log.ErrorLogData;
 import com.ghost616.agentbase.service.agent.log.HistoryExpandLogData;
@@ -42,7 +44,6 @@ import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ToolCall;
 import com.ghost616.agentbase.dto.model.ToolDefinition;
-import com.ghost616.agentbase.dto.skill.SkillConfigDTO;
 import com.ghost616.agentbase.dto.tool.ToolConfigDTO;
 import com.ghost616.agentbase.enums.AgentErrorCode;
 import com.ghost616.agentbase.enums.HookPhase;
@@ -218,15 +219,15 @@ public class ChatService {
 
         List<ToolDefinition> toolDefinitions = systemToolManager.getToolDefinitions();
         // 前置系统提示词构建后触发 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK，收集返回的提示词注入到系统消息链
+        // （可用技能/已加载技能提示词均由该阶段 HOOK 经 hookSystemPrompts 通道提供）
         List<String> hookSystemPrompts = collectSystemPromptHookResults(context);
-        ContextSystemInfo systemInfo = buildContextSystemInfo(context, toolDefinitions);
+        recordSkillLoadLog(context);
         for (String hookPrompt : hookSystemPrompts) {
             messages.add(Message.builder()
                     .role("system")
                     .content(hookPrompt)
                     .build());
         }
-        messages.addAll(systemInfo.systemMessages());
 
         for (AgentExecutionContext.HistoryEntry entry : context.getHistory()) {
             messages.add(buildMessageFromEntry(entry));
@@ -236,14 +237,13 @@ public class ChatService {
         messages = foldResult.messages();
 
         List<Message> postMessages = new ArrayList<>();
-        collectLoadedSkillMessages(postMessages, systemInfo.loadedSkillMessages());
         collectAnchorMessages(postMessages, foldResult.anchorMessages());
         collectPostSystemPrompt(postMessages, chatDataProvider.getPostSystemPrompt(sessionId));
         messages = insertPostSystemMessages(messages, postMessages);
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
-        List<ToolDefinition> tools = buildToolDefinitions(context, invoker, toolDefinitions, systemInfo.filteredLoadedSkills());
+        List<ToolDefinition> tools = buildToolDefinitions(context, invoker, toolDefinitions);
 
         com.ghost616.agentbase.dto.model.ChatRequest chatRequest =
                 com.ghost616.agentbase.dto.model.ChatRequest.builder()
@@ -275,7 +275,6 @@ public class ChatService {
             String sessionId,
             ModelConfigData configData) {
         List<ToolDefinition> toolDefinitions = systemToolManager.getToolDefinitions();
-        ContextSystemInfo systemInfo = buildContextSystemInfo(context, toolDefinitions);
 
         List<Message> input = buildIncrementalMessages(context);
         FoldResult foldResult = filterAndFold(input, context);
@@ -283,13 +282,15 @@ public class ChatService {
 
         String preSystemPrompt = getPreSystemPrompt(sessionCtx, sessionId);
         // 前置系统提示词构建后触发 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK，收集返回的提示词拼入 instructions
+        // （可用技能/已加载技能提示词均由该阶段 HOOK 经 hookSystemPrompts 通道提供）
         List<String> hookSystemPrompts = collectSystemPromptHookResults(context);
-        String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages(),
+        recordSkillLoadLog(context);
+        String instructions = buildInstructions(context, foldResult.anchorMessages(),
                 preSystemPrompt, chatDataProvider.getPostSystemPrompt(sessionId), hookSystemPrompts);
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
-        List<ToolDefinition> tools = buildToolDefinitions(context, invoker, toolDefinitions, systemInfo.filteredLoadedSkills());
+        List<ToolDefinition> tools = buildToolDefinitions(context, invoker, toolDefinitions);
 
         String previousResponseId = context.getLastResponseId() != null
                 ? context.getLastResponseId()
@@ -318,7 +319,6 @@ public class ChatService {
             String sessionId,
             ModelConfigData configData) {
         List<ToolDefinition> toolDefinitions = systemToolManager.getToolDefinitions();
-        ContextSystemInfo systemInfo = buildContextSystemInfo(context, toolDefinitions);
 
         List<Message> input = buildFullMessages(context);
         FoldResult foldResult = filterAndFold(input, context);
@@ -326,13 +326,15 @@ public class ChatService {
 
         String preSystemPrompt = getPreSystemPrompt(sessionCtx, sessionId);
         // 前置系统提示词构建后触发 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK，收集返回的提示词拼入 instructions
+        // （可用技能/已加载技能提示词均由该阶段 HOOK 经 hookSystemPrompts 通道提供）
         List<String> hookSystemPrompts = collectSystemPromptHookResults(context);
-        String instructions = buildInstructions(context, systemInfo, systemInfo.loadedSkillMessages(), foldResult.anchorMessages(),
+        recordSkillLoadLog(context);
+        String instructions = buildInstructions(context, foldResult.anchorMessages(),
                 preSystemPrompt, chatDataProvider.getPostSystemPrompt(sessionId), hookSystemPrompts);
 
         ModelInvoker invoker = modelInvokerManager.getInvoker(configData);
 
-        List<ToolDefinition> tools = buildToolDefinitions(context, invoker, toolDefinitions, systemInfo.filteredLoadedSkills());
+        List<ToolDefinition> tools = buildToolDefinitions(context, invoker, toolDefinitions);
 
         com.ghost616.agentbase.dto.model.ChatRequest chatRequest =
                 com.ghost616.agentbase.dto.model.ChatRequest.builder()
@@ -399,8 +401,6 @@ public class ChatService {
 
     private String buildInstructions(
             AgentExecutionContext context,
-            ContextSystemInfo systemInfo,
-            List<Message> loadedSkillMessages,
             List<Message> anchorMessages,
             String preSystemPrompt,
             String postSystemPrompt,
@@ -416,17 +416,8 @@ public class ChatService {
             }
             instructions.append(preSystemPrompt);
         }
-        for (Message systemMessage : systemInfo.systemMessages()) {
-            String content = systemMessage.getContent();
-            if (content != null && !content.isEmpty()) {
-                if (instructions.length() > 0) {
-                    instructions.append("\n\n");
-                }
-                instructions.append(content);
-            }
-        }
-        // AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK 返回的提示词与 systemInfo.systemMessages() 同等地位
-        // （紧随系统信息之后、已加载技能之前追加）
+        // AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK 返回的提示词（可用技能/已加载技能提示词，
+        // 原 systemInfo.systemMessages() 与 loadedSkillMessages 通道已迁移至此）
         if (hookSystemPrompts != null) {
             for (String hookPrompt : hookSystemPrompts) {
                 if (hookPrompt != null && !hookPrompt.isEmpty()) {
@@ -435,15 +426,6 @@ public class ChatService {
                     }
                     instructions.append(hookPrompt);
                 }
-            }
-        }
-        for (Message skillMessage : loadedSkillMessages) {
-            String content = skillMessage.getContent();
-            if (content != null && !content.isEmpty()) {
-                if (instructions.length() > 0) {
-                    instructions.append("\n\n");
-                }
-                instructions.append(content);
             }
         }
         for (Message anchorMessage : anchorMessages) {
@@ -523,65 +505,37 @@ public class ChatService {
         return foldMessageGroups(messages, context);
     }
 
-    private ContextSystemInfo buildContextSystemInfo(AgentExecutionContext context, List<ToolDefinition> toolDefinitions) {
-        List<Message> systemMessages = new ArrayList<>();
-        List<Message> loadedSkillMessages = new ArrayList<>();
-        List<SkillConfigDTO> skills = context.getSkills();
-        boolean hasLoadSkillsTool = toolDefinitions.stream()
-                .anyMatch(def -> LoadSkillsSystemTool.FULL_TOOL_NAME.equals(def.getName()));
-
-        List<SkillConfigDTO> filteredLoadedSkills = new ArrayList<>();
-
-        if (hasLoadSkillsTool) {
-            // 可用技能（SKILL）列表提示词生成逻辑已迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段 HOOK
-            // （通过 SystemPromptHookData 携带工具定义列表、SystemPromptHookResult 回传提示词），
-            // 此处仅保留已加载技能逻辑。
-
-            List<SkillConfigDTO> loadedSkills = parseLoadedSkills(context, skills);
-            for (SkillConfigDTO skill : loadedSkills) {
-                if (context.isMainSession() && skill.getSessionAuth() == SessionAuthType.CHILD) {
-                    continue;
-                }
-                filteredLoadedSkills.add(skill);
-            }
-            if (!filteredLoadedSkills.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("以下技能已加载，请按照其提示词指导执行任务：\n\n");
-                for (SkillConfigDTO skill : filteredLoadedSkills) {
-                    sb.append("## ").append(skill.getName()).append("\n");
-                    if (skill.getPrompt() != null && !skill.getPrompt().isEmpty()) {
-                        sb.append(skill.getPrompt()).append("\n\n");
-                    }
-                }
-                loadedSkillMessages.add(Message.builder()
-                        .role("system")
-                        .content(sb.toString())
-                        .build());
-                addLog(SkillLoadLogData.builder()
-                        .logLevel(LogLevel.INFO)
-                        .context(context)
-                        .skillNames(filteredLoadedSkills.stream()
-                                .map(SkillConfigDTO::getName)
-                                .collect(Collectors.toList()))
-                        .skillCount(filteredLoadedSkills.size())
-                        .build());
-            }
-        }
-
-        // 子会话相关的工具/技能权限说明生成逻辑已迁移至 platform-app 的 getPreSystemPrompt 实现
-        // （通过会话级前置提示词注入，见 ChatDataProvider.getPreSystemPrompt），此处不再生成。
-
-        return new ContextSystemInfo(systemMessages, filteredLoadedSkills, loadedSkillMessages);
-    }
-
     /**
-     * 将已加载技能 system 消息收集到统一后置消息列表（null/空列表跳过）。
+     * 记录已加载技能日志（SkillLoadLogData）：解析 _sys_loading_SKILLS 会话变量中的技能名列表，
+     * 非空时记录 INFO 级日志（skillNames + skillCount）。
+     *
+     * <p>已加载技能提示词生成已迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段 HOOK
+     * （由实现方经 SystemPromptHookData/SystemPromptHookResult 通道提供），
+     * 此处仅保留日志记录时机（基于会话变量，与 hasLoadSkillsTool 判断解耦）。</p>
+     *
+     * @param context 智能体执行上下文
      */
-    private void collectLoadedSkillMessages(List<Message> target, List<Message> loadedSkillMessages) {
-        if (loadedSkillMessages == null || loadedSkillMessages.isEmpty()) {
+    private void recordSkillLoadLog(AgentExecutionContext context) {
+        String json = context.getSessionVariable(LoadSkillsSystemTool.SESSION_KEY);
+        if (json == null || json.isBlank()) {
             return;
         }
-        target.addAll(loadedSkillMessages);
+        List<String> skillNames;
+        try {
+            skillNames = JsonMapper.MAPPER.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            log.debug("解析 _sys_loading_SKILLS 失败: {}", json, e);
+            return;
+        }
+        if (skillNames == null || skillNames.isEmpty()) {
+            return;
+        }
+        addLog(SkillLoadLogData.builder()
+                .logLevel(LogLevel.INFO)
+                .context(context)
+                .skillNames(skillNames)
+                .skillCount(skillNames.size())
+                .build());
     }
 
     /**
@@ -634,31 +588,58 @@ public class ChatService {
         return -1;
     }
 
+    /**
+     * 构建发送给模型的工具定义列表。
+     *
+     * <p>工具配置来源：若 BEFORE_TOOL_DEFINITIONS_BUILD 阶段注册了 HOOK
+     * （{@link HookManager#hasHooks}），触发 HOOK 并合并返回的
+     * ToolDefinitionsHookResult.getTools()（null 安全，合并结果可能为空）；
+     * 否则回退使用 context.getTools()。最终将工具配置逐项（主会话跳过
+     * sessionAuth==CHILD）经 invoker.toToolDefinition 转换，并始终附加
+     * 系统工具 toolDefinitions（按名称去重，系统工具优先）。</p>
+     *
+     * @param context        智能体执行上下文
+     * @param invoker        模型调用器（负责 ToolConfigDTO → ToolDefinition 转换）
+     * @param toolDefinitions 系统工具定义列表（始终附加，按名称去重）
+     * @return 工具定义列表
+     */
     private List<ToolDefinition> buildToolDefinitions(
             AgentExecutionContext context,
             ModelInvoker invoker,
-            List<ToolDefinition> toolDefinitions,
-            List<SkillConfigDTO> filteredLoadedSkills) {
+            List<ToolDefinition> toolDefinitions) {
+        List<ToolConfigDTO> toolConfigs = new ArrayList<>();
+        if (hookManager.hasHooks(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD)) {
+            List<HookResult> hookResults = hookManager.triggerHooks(
+                    HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD, context,
+                    new ToolDefinitionsHookData(context.getTools()));
+            if (hookResults != null) {
+                for (HookResult hookResult : hookResults) {
+                    ToolDefinitionsHookResult toolsResult =
+                            hookManager.castHookResult(hookResult, ToolDefinitionsHookResult.class);
+                    if (toolsResult != null && toolsResult.getTools() != null) {
+                        toolConfigs.addAll(toolsResult.getTools());
+                    }
+                }
+            }
+        } else if (context.getTools() != null) {
+            toolConfigs.addAll(context.getTools());
+        }
         Map<String, ToolDefinition> toolMap = new LinkedHashMap<>();
-        for (ToolConfigDTO t : context.getTools()) {
+        for (ToolConfigDTO t : toolConfigs) {
+            if (t == null) {
+                continue;
+            }
             if (context.isMainSession() && SessionAuthType.CHILD == t.getSessionAuth()) {
                 continue;
             }
             ToolDefinition def = invoker.toToolDefinition(t);
-            toolMap.put(def.getName(), def);
+            if (def != null && def.getName() != null) {
+                toolMap.put(def.getName(), def);
+            }
         }
         for (ToolDefinition def : toolDefinitions) {
-            toolMap.put(def.getName(), def);
-        }
-        for (SkillConfigDTO skill : filteredLoadedSkills) {
-            if (skill.getSkillTools() != null) {
-                for (ToolConfigDTO st : skill.getSkillTools()) {
-                    if (context.isMainSession() && SessionAuthType.CHILD == st.getSessionAuth()) {
-                        continue;
-                    }
-                    ToolDefinition def = invoker.toToolDefinition(st);
-                    toolMap.put(def.getName(), def);
-                }
+            if (def != null && def.getName() != null) {
+                toolMap.put(def.getName(), def);
             }
         }
         return new ArrayList<>(toolMap.values());
@@ -741,40 +722,6 @@ public class ChatService {
                             .build());
                     contextMutator.setStopped();
                 });
-    }
-
-    private List<SkillConfigDTO> parseLoadedSkills(AgentExecutionContext context, List<SkillConfigDTO> skills) {
-        String json = context.getSessionVariable(LoadSkillsSystemTool.SESSION_KEY);
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        List<String> loadedNames;
-        try {
-            loadedNames = JsonMapper.MAPPER.readValue(json, new TypeReference<List<String>>() {});
-        } catch (Exception e) {
-            log.debug("解析 _sys_loading_SKILLS 失败: {}", json, e);
-            addLog(ErrorLogData.builder()
-                    .logLevel(LogLevel.ERROR)
-                    .context(context)
-                    .errorCode(AgentErrorCode.SYSTEM_ERROR.getCode())
-                    .message("解析已加载技能列表失败")
-                    .exception(e)
-                    .build());
-            return List.of();
-        }
-        if (loadedNames == null || loadedNames.isEmpty()) {
-            return List.of();
-        }
-        Set<String> nameSet = new HashSet<>(loadedNames);
-        List<SkillConfigDTO> result = new ArrayList<>();
-        if (skills != null) {
-            for (SkillConfigDTO skill : skills) {
-                if (nameSet.contains(skill.getName())) {
-                    result.add(skill);
-                }
-            }
-        }
-        return result;
     }
 
     private FoldResult foldMessageGroups(List<Message> messages, AgentExecutionContext context) {
@@ -948,12 +895,6 @@ public class ChatService {
                     .build());
             return Collections.emptySet();
         }
-    }
-
-    private record ContextSystemInfo(
-            List<Message> systemMessages,
-            List<SkillConfigDTO> filteredLoadedSkills,
-            List<Message> loadedSkillMessages) {
     }
 
     private record FoldResult(List<Message> messages, List<Message> anchorMessages) {

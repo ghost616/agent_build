@@ -100,6 +100,12 @@ preSystemPrompt 缓存与会话级前置提示词优化（2026-08-27）：
 可用技能列表提示词 HOOK 化（2026-08-27）：
 - buildContextSystemInfo 移除"可用技能（SKILL）列表"生成逻辑（原 hasLoadSkillsTool 分支中生成 systemMessages 技能列表提示词的部分，含 availableSkills 过滤与"以下是可用的技能（SKILL）列表"消息），该功能迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段 HOOK；保留"已加载技能"逻辑（parseLoadedSkills → filteredLoadedSkills 数据回传与 loadedSkillMessages 提示词、SkillLoadLogData 日志），hasLoadSkillsTool 判断继续用于该保留部分。
 - 三个路由方法在获取 preSystemPrompt 后触发 hookManager.triggerHooks(HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD, context, new SystemPromptHookData(systemToolManager.getToolDefinitions()))，新增私有方法 collectSystemPromptHookResults(context) 收集返回的 List<HookResult> 并经 castHookResult 过滤 SystemPromptHookResult 实例，提取非空白 systemPrompt 文本（null/空白跳过）；chatViaChatCompletions 将每个结果构建 role=system 消息追加到 messages（preSystemPrompt 消息之后、history 之前）；chatViaResponses/chatViaResponsesStateless 通过 buildInstructions 新增参数 hookSystemPrompts（List<String>）拼入 instructions（紧随 systemInfo.systemMessages() 之后、已加载技能之前，与系统信息同等地位）。触发失败/异常不中断主流程（HookManager 逐 hook 容错 + collectSystemPromptHookResults 外层 try-catch 兜底返回空列表）。
+工具列表 HOOK 化与 buildContextSystemInfo 删除（2026-08-27）：
+- 删除 buildContextSystemInfo 方法、ContextSystemInfo record、parseLoadedSkills 方法、collectLoadedSkillMessages 方法；三个路由方法清理 systemInfo 相关引用（不再 addAll systemMessages、不再 collect loadedSkillMessages）。
+- buildInstructions 签名调整：移除 systemInfo 与 loadedSkillMessages 参数，保留 anchorMessages/preSystemPrompt/postSystemPrompt/hookSystemPrompts（可用技能/已加载技能提示词均由 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段 HOOK 经 hookSystemPrompts 通道提供）。
+- chatViaChatCompletions：messages 不再 addAll(systemInfo.systemMessages())；postMessages 仅保留 anchorMessages 与 postSystemPrompt（collectLoadedSkillMessages 移除）。
+- 已加载技能日志保留：新增私有方法 recordSkillLoadLog(context)——解析 _sys_loading_SKILLS 会话变量中的技能名列表，非空时记录 SkillLoadLogData（skillNames+skillCount），三个路由方法在构建提示词处调用（与 hasLoadSkillsTool 判断解耦，基于会话变量记录）。
+- buildToolDefinitions 重构（签名移除 filteredLoadedSkills 参数）：boolean hasToolHook = hookManager.hasHooks(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD)；无工具处理 HOOK 时 toolConfigs = context.getTools()（默认回退）；有工具处理 HOOK 时 hookManager.triggerHooks(BEFORE_TOOL_DEFINITIONS_BUILD, context, new ToolDefinitionsHookData(context.getTools())) 收集结果，经 castHookResult 过滤 ToolDefinitionsHookResult 并合并其 getTools()（null 安全，合并结果可能为空）；最终列表：toolConfigs 逐项（null 跳过、主会话跳过 sessionAuth==CHILD）经 invoker.toToolDefinition 转换（null/无名跳过）+ 系统工具 toolDefinitions 始终附加（按名称去重），返回 List<ToolDefinition>。技能工具注册循环移除（技能工具由工具处理 HOOK 通道提供）。
 ## ChatDataProvider
 
 聊天数据提供者接口（com.ghost616.agentbase.service.agent.ChatDataProvider），定义六个方法：getModelConfig(String modelId) 按 ID 获取 ModelConfigData、updateSessionModelId(String sessionId, String modelId) 更新会话的模型 ID、getHooks() 获取所有已注册的 HookInvoker、getHooks(String sessionId) 按会话 ID 获取对应的 HookInvoker 列表、getPreSystemPrompt(String sessionId) 获取会话级前置系统提示词（注入主 system prompt 之后）、getPostSystemPrompt(String sessionId) 获取会话级后置系统提示词（注入最后一个 user 消息之前，无 user 时追加末尾）。两个提示词方法返回 null 或空白字符串时 ChatService 跳过注入，异常向上传播不吞。用于解耦 ChatService 与具体数据访问层。
@@ -449,3 +455,10 @@ SubSessionOpenMode 枚举（com.ghost616.agentbase.enums.SubSessionOpenMode）�
 - HookPhase 枚举新增 AFTER_PRE_SYSTEM_PROMPT_BUILD("前置系统提示词构建后")：ChatService 三个路由方法在获取会话级前置提示词（getPreSystemPrompt）之后触发该阶段全局 HOOK，用于将可用技能/工具相关提示词生成外置化。
 - SystemPromptHookResult（com.ghost616.agentbase.service.agent.invoker，implements HookResult）：携带 final String systemPrompt 字段，提供 getSystemPrompt() 访问；由 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段 HOOK 返回，ChatService 经 HookManager.castHookResult 过滤后注入。
 - SystemPromptHookData（implements HookData<SystemPromptHookResult>）：构造参数 List<ToolDefinition>，内部防御性深拷贝——列表复制 + 单个 ToolDefinition 用 builder 重建（name/description 拷贝，parameters Map 新建 HashMap 拷贝），toolDefinitions 为 null 时视为空列表；getToolDefinitions() 返回不可变副本。作为 AFTER_PRE_SYSTEM_PROMPT_BUILD 阶段数据载体，携带当前系统工具定义列表（systemToolManager.getToolDefinitions()）供 HOOK 消费。
+## 工具定义构建 HOOK
+
+工具定义构建 HOOK（2026-08-27）：
+- HookPhase 枚举新增 BEFORE_TOOL_DEFINITIONS_BUILD("工具定义构建前")：ChatService.buildToolDefinitions 在构建模型工具定义前经 HookManager.hasHooks 判断后触发，用于工具列表来源外置化。
+- ToolDefinitionsHookResult（com.ghost616.agentbase.service.agent.invoker，implements HookResult）：携带 List<ToolConfigDTO> tools 字段，提供 getTools() 访问（可能返回 null，调用方需 null 安全）。
+- ToolDefinitionsHookData（implements HookData<ToolDefinitionsHookResult>）：构造参数 List<ToolConfigDTO>（即 context.getTools() 的引用，按现有 HookData 风格直接持有），提供 getTools() 访问；作为 BEFORE_TOOL_DEFINITIONS_BUILD 阶段数据载体，携带会话上下文工具配置列表供 HOOK 消费。
+- HookManager 新增 boolean hasHooks(HookPhase phase)：检查 systemHooks 与 regularPhaseHooks 缓存中该阶段是否注册了 HOOK（任一非空即 true；phase 为 null 返回 false），供调用方预判是否存在该阶段 HOOK 以决定触发/回退策略。

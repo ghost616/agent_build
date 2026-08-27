@@ -478,4 +478,32 @@ class HookManagerTest {
     void castHookResult_类型不匹配返回null() {
         assertNull(hookManager.castHookResult(new FakeResult(), EmptyHookResult.class));
     }
+
+    // ==================== hasHooks ====================
+
+    @Test
+    void hasHooks_未注册阶段或null阶段返回false() {
+        assertFalse(hookManager.hasHooks(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD));
+        assertFalse(hookManager.hasHooks(null));
+    }
+
+    @Test
+    void hasHooks_注册普通HOOK后对应阶段返回true() {
+        when(chatDataProvider.getHooks()).thenReturn(List.of(regularHook1));
+        hookManager.refreshHooks();
+
+        assertTrue(hookManager.hasHooks(HookPhase.BEFORE_MESSAGE_SEND),
+                "普通 HOOK 注册后其阶段应返回 true");
+        assertFalse(hookManager.hasHooks(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD),
+                "未注册阶段应返回 false");
+    }
+
+    @Test
+    void hasHooks_注册系统HOOK后对应阶段返回true() {
+        when(chatDataProvider.getHooks()).thenReturn(List.of(systemHook1));
+        hookManager.refreshHooks();
+
+        assertTrue(hookManager.hasHooks(HookPhase.BEFORE_MESSAGE_SEND),
+                "系统 HOOK 注册后其阶段应返回 true");
+    }
 }

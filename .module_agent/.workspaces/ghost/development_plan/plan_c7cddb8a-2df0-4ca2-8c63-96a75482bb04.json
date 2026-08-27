@@ -1,0 +1,10 @@
+{
+  "plan_id": "plan_c7cddb8a-2df0-4ca2-8c63-96a75482bb04",
+  "module_name": "platform-app",
+  "development_plan": "工具处理 HOOK 注册（platform-app，依赖 agent-integration 的 LoadedSkillsToolHook）：\n1. AgentContextConfiguration 新增 @Bean 注册 LoadedSkillsToolHook（构造无参，直接 new LoadedSkillsToolHook()），与 AvailableSkillsSystemHook 一并被 DefaultChatDataProvider.getHooks()（getBeansOfType(HookInvoker.class)）自动收集进聊天流程。\n2. 适配 AgentContextConfigurationTest：新增用例断言 LoadedSkillsToolHook Bean 存在且被 getHooks 收集。\n3. 运行 platform-app 模块 Maven 编译与相关测试（注意 66 个预存测试问题与本次变更无关，相关用例需通过）。",
+  "session_id": "c20b77f7-a1a1-44e7-8468-bfb57c031fbd",
+  "modified_files": [
+    "platform-app/src/main/java/com/ghost616/platform/config/AgentContextConfiguration.java",
+    "platform-app/src/test/java/com/ghost616/platform/config/AgentContextConfigurationTest.java"
+  ]
+}

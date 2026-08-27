@@ -177,7 +177,7 @@ class ChatServiceResponsesTest {
     }
 
     @Test
-    @DisplayName("requestType=responses 时，instructions 应包含 systemPrompt 与已加载技能提示词")
+    @DisplayName("requestType=responses 时，instructions 包含 systemPrompt 且不再包含已加载技能提示词（已迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK）")
     void responses_instructions应包含systemPrompt与已加载技能提示词() {
         SkillConfigDTO loadedSkill = SkillConfigDTO.builder()
                 .name("loaded_skill")
@@ -200,8 +200,8 @@ class ChatServiceResponsesTest {
         assertNotNull(captured.getInstructions());
         assertTrue(captured.getInstructions().contains("SYSTEM_PROMPT_TEXT"),
                 "instructions 应包含 systemPrompt");
-        assertTrue(captured.getInstructions().contains("SKILL_PROMPT_TEXT"),
-                "instructions 应包含已加载技能提示词");
+        assertFalse(captured.getInstructions().contains("SKILL_PROMPT_TEXT"),
+                "移除已加载技能提示词生成后，instructions 不应包含已加载技能提示词");
     }
 
     @Test
@@ -425,7 +425,7 @@ class ChatServiceResponsesTest {
     }
 
     @Test
-    @DisplayName("requestType=openai 时，已加载技能消息应插入到历史之后、最后一条 user 消息之前")
+    @DisplayName("requestType=openai 时，已加载技能消息不再由 ChatService 生成（迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK）")
     void openai_已加载技能消息插入到最后一个user之前() {
         SkillConfigDTO loadedSkill = SkillConfigDTO.builder()
                 .name("loaded_skill")
@@ -451,23 +451,13 @@ class ChatServiceResponsesTest {
                 executeChat(apiRequest, harness, "openai", Flux.empty());
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
-        int loadedIdx = -1;
-        for (int i = 0; i < contents.size(); i++) {
-            if (contents.get(i) != null && contents.get(i).contains("以下技能已加载")) {
-                loadedIdx = i;
-                break;
-            }
-        }
-        int lastUserIdx = contents.lastIndexOf("hello");
-        int assistantIdx = contents.indexOf("a1");
-        assertTrue(loadedIdx >= 0, "chat completions 分支应包含已加载技能消息");
-        assertTrue(assistantIdx >= 0 && loadedIdx > assistantIdx,
-                "已加载技能消息应位于历史消息之后");
-        assertTrue(lastUserIdx > loadedIdx, "已加载技能消息应位于最后一条 user 消息之前");
+        assertFalse(contents.stream().anyMatch(c -> c != null && c.contains("以下技能已加载")),
+                "移除已加载技能提示词生成后，messages 不应包含已加载技能消息");
+        assertTrue(contents.contains("hello"), "user 消息应保留");
     }
 
     @Test
-    @DisplayName("requestType=openai 时，无 user 消息时已加载技能消息应回退追加到列表末尾")
+    @DisplayName("requestType=openai 时，tool_continue 请求不新增 user 消息且不生成已加载技能消息")
     void openai_无user消息时已加载技能消息追加到末尾() {
         SkillConfigDTO loadedSkill = SkillConfigDTO.builder()
                 .name("loaded_skill")
@@ -498,20 +488,12 @@ class ChatServiceResponsesTest {
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
         assertFalse(contents.stream().anyMatch(c -> c != null && c.contains("hello")),
                 "tool_continue 请求不应新增 user 消息");
-        int loadedIdx = -1;
-        for (int i = 0; i < contents.size(); i++) {
-            if (contents.get(i) != null && contents.get(i).contains("以下技能已加载")) {
-                loadedIdx = i;
-                break;
-            }
-        }
-        assertTrue(loadedIdx >= 0, "应包含已加载技能消息");
-        assertEquals(contents.size() - 1, loadedIdx,
-                "无 user 消息时已加载技能消息应追加到列表末尾");
+        assertFalse(contents.stream().anyMatch(c -> c != null && c.contains("以下技能已加载")),
+                "移除已加载技能提示词生成后，messages 不应包含已加载技能消息");
     }
 
     @Test
-    @DisplayName("requestType=openai 时，已加载技能消息不属于 system 前缀，仅由可用技能列表占据前缀")
+    @DisplayName("requestType=openai 时，已加载技能消息不再由 ChatService 生成（无系统前缀消息）")
     void openai_已加载技能消息不进入系统前缀() {
         SkillConfigDTO loadedSkill = SkillConfigDTO.builder()
                 .name("loaded_skill")
@@ -535,27 +517,9 @@ class ChatServiceResponsesTest {
                 executeChat(apiRequest, harness, "openai", Flux.empty());
 
         List<String> contents = captured.getMessages().stream().map(Message::getContent).toList();
-        int loadedIdx = -1;
-        for (int i = 0; i < contents.size(); i++) {
-            if (contents.get(i) != null && contents.get(i).contains("以下技能已加载")) {
-                loadedIdx = i;
-                break;
-            }
-        }
-        int helloIdx = contents.lastIndexOf("hello");
-        int q1Idx = contents.indexOf("q1");
-        assertTrue(loadedIdx >= 0 && loadedIdx < helloIdx,
-                "已加载技能消息应插入在最后一条 user 消息之前，而非系统前缀");
-        assertTrue(loadedIdx > q1Idx,
-                "已加载技能消息应位于历史消息(q1)之后，而非系统前缀区");
-        boolean skillBeforeHistory = false;
-        for (int i = 0; i < q1Idx; i++) {
-            if (contents.get(i) != null && contents.get(i).contains("以下技能已加载")) {
-                skillBeforeHistory = true;
-                break;
-            }
-        }
-        assertFalse(skillBeforeHistory, "系统前缀区（历史消息之前）不应包含已加载技能消息");
+        assertFalse(contents.stream().anyMatch(c -> c != null && c.contains("以下技能已加载")),
+                "移除已加载技能提示词生成后，系统前缀区与历史区均不应包含已加载技能消息");
+        assertTrue(contents.contains("q1") && contents.contains("hello"), "历史与当前 user 消息应保留");
     }
 
     @Test
@@ -618,7 +582,7 @@ class ChatServiceResponsesTest {
     }
 
     @Test
-    @DisplayName("requestType=openai 时，批量折叠 + 锚点展开 + loadedSkills 顺序为 loadedSkills < 锚点 < 当前 user")
+    @DisplayName("requestType=openai 时，批量折叠 + 锚点展开（已加载技能提示词不再由 ChatService 生成）")
     void openai_批量折叠锚点展开与loadedSkills顺序() {
         SkillConfigDTO loadedSkill = SkillConfigDTO.builder()
                 .name("loaded_skill")
@@ -656,10 +620,8 @@ class ChatServiceResponsesTest {
                 .count();
         assertEquals(10, placeholderCount, "应批量折叠 10 组");
 
-        String loadedContent = contents.stream()
-                .filter(c -> c != null && c.contains("以下技能已加载"))
-                .findFirst().orElse(null);
-        assertNotNull(loadedContent, "应包含已加载技能消息");
+        assertFalse(contents.stream().anyMatch(c -> c != null && c.contains("以下技能已加载")),
+                "移除已加载技能提示词生成后，messages 不应包含已加载技能消息");
 
         String anchor = contents.stream()
                 .filter(c -> c != null && c.startsWith("【历史消息组2】"))
@@ -670,11 +632,8 @@ class ChatServiceResponsesTest {
         assertTrue(anchor.contains("\"role\":\"assistant\"") && anchor.contains("\"content\":\"a2\""),
                 "锚点应包含 assistant 内容");
 
-        int loadedIdx = indexOfContent(contents, "以下技能已加载");
         int anchorIdx = indexOfContent(contents, "【历史消息组2】");
         int lastUserIdx = contents.lastIndexOf("hello");
-        assertTrue(loadedIdx >= 0 && loadedIdx < anchorIdx,
-                "loadedSkills 应位于锚点展开之前");
         assertTrue(anchorIdx < lastUserIdx,
                 "锚点展开应位于最后一条 user 消息之前");
     }
@@ -734,7 +693,7 @@ class ChatServiceResponsesTest {
     }
 
     @Test
-    @DisplayName("requestType=responses_stateless 时，后置提示词应拼入已加载技能与锚点内容之后（末尾）")
+    @DisplayName("requestType=responses_stateless 时，后置提示词应拼入锚点内容之后（末尾）且不再包含已加载技能提示词")
     void responsesStateless_后置提示词位于技能与锚点内容之后() {
         SkillConfigDTO loadedSkill = SkillConfigDTO.builder()
                 .name("loaded_skill")
@@ -764,10 +723,8 @@ class ChatServiceResponsesTest {
                 executeChat(apiRequest, harness, RequestType.RESPONSES_STATELESS.getCode(), Flux.empty());
 
         String instructions = captured.getInstructions();
-        assertTrue(instructions.contains("SKILL_PROMPT_TEXT"), "instructions 应包含已加载技能提示词");
+        assertFalse(instructions.contains("SKILL_PROMPT_TEXT"), "移除已加载技能提示词生成后，instructions 不应包含已加载技能提示词");
         assertTrue(instructions.contains("【历史消息组2】"), "instructions 应包含锚点展开内容");
-        assertTrue(instructions.indexOf("POST_PROMPT") > instructions.indexOf("SKILL_PROMPT_TEXT"),
-                "后置提示词应拼接在已加载技能内容之后");
         assertTrue(instructions.indexOf("POST_PROMPT") > instructions.indexOf("【历史消息组2】"),
                 "后置提示词应拼接在锚点内容之后");
         assertTrue(instructions.endsWith("POST_PROMPT"), "后置提示词应位于 instructions 末尾");

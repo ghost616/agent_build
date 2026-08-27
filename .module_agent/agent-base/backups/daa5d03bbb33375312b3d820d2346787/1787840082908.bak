@@ -66,28 +66,6 @@ public class HookManager {
     }
 
     /**
-     * 判断指定阶段是否注册了 HOOK（普通阶段 HOOK 或系统 HOOK 任一非空即 true）。
-     *
-     * <p>用于调用方在触发前预判是否存在该阶段的 HOOK，避免无 HOOK 时
-     * 仍执行触发/结果收集开销（如 ChatService.buildToolDefinitions 依据
-     * BEFORE_TOOL_DEFINITIONS_BUILD 是否有 HOOK 决定工具列表来源）。</p>
-     *
-     * @param phase 触发阶段，可为 null
-     * @return 该阶段注册了任意 HOOK 返回 true；phase 为 null 返回 false
-     */
-    public boolean hasHooks(HookPhase phase) {
-        if (phase == null) {
-            return false;
-        }
-        List<HookInvokerWrapper> regularHooks = regularPhaseHooks.get(phase);
-        if (regularHooks != null && !regularHooks.isEmpty()) {
-            return true;
-        }
-        List<HookInvokerWrapper> hooks = systemHooks.get(phase);
-        return hooks != null && !hooks.isEmpty();
-    }
-
-    /**
      * 触发全局阶段钩子（普通 HOOK 与系统 HOOK，系统 HOOK 按 index 升序）。
      *
      * @param phase 触发阶段

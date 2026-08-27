@@ -82,7 +82,7 @@ class AvailableSkillsSystemHookTest {
         assertTrue(result.getSystemPrompt().contains("以下是可用的技能"));
     }
 
-    // ==================== 技能列表构建（含描述/不含描述） ====================
+    // ==================== 可用技能列表构建（含描述/不含描述） ====================
 
     @Test
     void execute_技能含描述_文本断言() {
@@ -132,7 +132,7 @@ class AvailableSkillsSystemHookTest {
         assertTrue(prompt.indexOf("- skill_a") < prompt.indexOf("- skill_b"));
     }
 
-    // ==================== 主会话过滤 CHILD ====================
+    // ==================== 主会话过滤 CHILD（可用技能） ====================
 
     @Test
     void execute_主会话_过滤CHILD技能() {
@@ -188,10 +188,95 @@ class AvailableSkillsSystemHookTest {
         assertNull(hook.execute(ctx, dataWithLoadSkills()));
     }
 
+    // ==================== 已加载技能提示词段 ====================
+
+    @Test
+    void execute_两段拼接_可用技能在前已加载技能在后() {
+        when(ctx.isMainSession()).thenReturn(true);
+        when(ctx.getSkills()).thenReturn(List.of(
+                skill("web_search", "网页搜索技能", null, SessionAuthType.ALL),
+                skill("data_probe", "数据探查", "执行数据探查并返回结果", SessionAuthType.ALL)));
+        when(ctx.getSessionVariable(LoadSkillsSystemTool.SESSION_KEY)).thenReturn("[\"data_probe\"]");
+
+        SystemPromptHookResult result = hook.execute(ctx, dataWithLoadSkills());
+
+        assertEquals(expectedPrompt("- web_search: 网页搜索技能\n- data_probe: 数据探查\n")
+                + "\n\n"
+                + expectedLoadedPrompt("## data_probe\n", "执行数据探查并返回结果"), result.getSystemPrompt());
+    }
+
+    @Test
+    void execute_无可用技能但有已加载技能_仅返回已加载段() {
+        when(ctx.isMainSession()).thenReturn(true);
+        when(ctx.getSkills()).thenReturn(List.of(),
+                List.of(skill("data_probe", null, "执行数据探查", SessionAuthType.ALL)));
+        when(ctx.getSessionVariable(LoadSkillsSystemTool.SESSION_KEY)).thenReturn("[\"data_probe\"]");
+
+        SystemPromptHookResult result = hook.execute(ctx, dataWithLoadSkills());
+
+        assertNotNull(result);
+        assertEquals(expectedLoadedPrompt("## data_probe\n", "执行数据探查"), result.getSystemPrompt());
+    }
+
+    @Test
+    void execute_已加载技能无提示词_仅生成name标题() {
+        when(ctx.isMainSession()).thenReturn(true);
+        when(ctx.getSkills()).thenReturn(List.of(
+                skill("data_probe", "数据探查", null, SessionAuthType.ALL)));
+        when(ctx.getSessionVariable(LoadSkillsSystemTool.SESSION_KEY)).thenReturn("[\"data_probe\"]");
+
+        SystemPromptHookResult result = hook.execute(ctx, dataWithLoadSkills());
+
+        assertEquals(expectedPrompt("- data_probe: 数据探查\n")
+                + "\n\n"
+                + expectedLoadedPrompt("## data_probe\n", null), result.getSystemPrompt());
+    }
+
+    @Test
+    void execute_会话变量解析失败_降级仅返回可用列表段() {
+        when(ctx.isMainSession()).thenReturn(true);
+        when(ctx.getSkills()).thenReturn(List.of(
+                skill("web_search", "网页搜索技能", null, SessionAuthType.ALL)));
+        when(ctx.getSessionVariable(LoadSkillsSystemTool.SESSION_KEY)).thenReturn("not-a-json");
+
+        SystemPromptHookResult result = hook.execute(ctx, dataWithLoadSkills());
+
+        assertEquals(expectedPrompt("- web_search: 网页搜索技能\n"), result.getSystemPrompt());
+    }
+
+    @Test
+    void execute_主会话_已加载CHILD技能被过滤_返回null() {
+        when(ctx.isMainSession()).thenReturn(true);
+        when(ctx.getSkills()).thenReturn(List.of(
+                skill("child_skill", "子技能描述", "子技能提示词", SessionAuthType.CHILD)));
+        when(ctx.getSessionVariable(LoadSkillsSystemTool.SESSION_KEY)).thenReturn("[\"child_skill\"]");
+
+        assertNull(hook.execute(ctx, dataWithLoadSkills()));
+    }
+
+    @Test
+    void execute_非主会话_已加载CHILD技能_两段均包含() {
+        when(ctx.isMainSession()).thenReturn(false);
+        when(ctx.getSkills()).thenReturn(List.of(
+                skill("child_skill", "子技能描述", "子技能提示词", SessionAuthType.CHILD)));
+        when(ctx.getSessionVariable(LoadSkillsSystemTool.SESSION_KEY)).thenReturn("[\"child_skill\"]");
+
+        SystemPromptHookResult result = hook.execute(ctx, dataWithLoadSkills());
+
+        assertEquals(expectedPrompt("- child_skill: 子技能描述\n")
+                + "\n\n"
+                + expectedLoadedPrompt("## child_skill\n", "子技能提示词"), result.getSystemPrompt());
+    }
+
     private SkillConfigDTO skill(String name, String description, SessionAuthType sessionAuth) {
+        return skill(name, description, null, sessionAuth);
+    }
+
+    private SkillConfigDTO skill(String name, String description, String prompt, SessionAuthType sessionAuth) {
         return SkillConfigDTO.builder()
                 .name(name)
                 .description(description)
+                .prompt(prompt)
                 .sessionAuth(sessionAuth)
                 .build();
     }
@@ -207,5 +292,11 @@ class AvailableSkillsSystemHookTest {
                 + skillLines
                 + "\n请使用 " + LoadSkillsSystemTool.FULL_TOOL_NAME
                 + " 系统工具加载所需技能。加载后，该技能的关联工具将变为可用，届时再调用具体工具。禁止直接以技能名称作为工具调用。";
+    }
+
+    private String expectedLoadedPrompt(String skillHeaderLine, String prompt) {
+        return "以下技能已加载，请按照其提示词指导执行任务：\n\n"
+                + skillHeaderLine
+                + (prompt != null ? prompt + "\n\n" : "");
     }
 }

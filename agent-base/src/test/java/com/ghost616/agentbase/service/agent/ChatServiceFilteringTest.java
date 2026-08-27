@@ -225,7 +225,7 @@ class ChatServiceFilteringTest {
     }
 
     @Nested
-    @DisplayName("Section 2: 已加载技能提示词过滤（第181-198行）")
+    @DisplayName("Section 2: 已加载技能提示词已 HOOK 化（不再由 ChatService 生成）")
     class LoadedSkillsPromptFilteringTest {
 
         private TestHarness createHarnessWithLoadedSkills(List<SkillConfigDTO> skills,
@@ -238,7 +238,7 @@ class ChatServiceFilteringTest {
         }
 
         @Test
-        @DisplayName("主会话时，已加载技能中 sessionAuth == CHILD 的应被跳过")
+        @DisplayName("存在 CHILD/ALL 已加载技能时，ChatService 不再生成已加载技能提示词消息（迁移至 AFTER_PRE_SYSTEM_PROMPT_BUILD HOOK）")
         void mainSession_shouldSkipChildLoadedSkills() {
             SkillConfigDTO childSkill = SkillConfigDTO.builder()
                     .name("child_loaded").sessionAuth(SessionAuthType.CHILD).prompt("child prompt").build();
@@ -250,15 +250,11 @@ class ChatServiceFilteringTest {
             var captured = executeChat("1", harness);
 
             String loadedContent = findMessageByContent(getSystemMessages(captured), "以下技能已加载");
-            assertNotNull(loadedContent);
-            assertTrue(loadedContent.contains("all_loaded"), "应包含 ALL 技能");
-            assertTrue(loadedContent.contains("all prompt"));
-            assertFalse(loadedContent.contains("child_loaded"), "不应包含 CHILD 技能");
-            assertFalse(loadedContent.contains("child prompt"));
+            assertNull(loadedContent, "移除已加载技能提示词生成后，ChatService 不应再生成该消息");
         }
 
         @Test
-        @DisplayName("主会话时，已加载技能中 sessionAuth 非 CHILD 的其他技能应正常显示")
+        @DisplayName("存在 PARENT/null 已加载技能时，ChatService 不再生成已加载技能提示词消息")
         void mainSession_shouldIncludeNonChildLoadedSkills() {
             SkillConfigDTO parentSkill = SkillConfigDTO.builder()
                     .name("parent_loaded").sessionAuth(SessionAuthType.PARENT).prompt("parent prompt").build();
@@ -270,13 +266,11 @@ class ChatServiceFilteringTest {
             var captured = executeChat("1", harness);
 
             String loadedContent = findMessageByContent(getSystemMessages(captured), "以下技能已加载");
-            assertNotNull(loadedContent);
-            assertTrue(loadedContent.contains("parent_loaded"));
-            assertTrue(loadedContent.contains("null_loaded"));
+            assertNull(loadedContent, "移除已加载技能提示词生成后，ChatService 不应再生成该消息");
         }
 
         @Test
-        @DisplayName("非主会话时，已加载技能不过滤 CHILD 权限")
+        @DisplayName("子会话存在 CHILD 已加载技能时，ChatService 不再生成已加载技能提示词消息")
         void childSession_shouldNotFilterChildLoadedSkills() {
             SkillConfigDTO childSkill = SkillConfigDTO.builder()
                     .name("child_loaded").sessionAuth(SessionAuthType.CHILD).prompt("child prompt").build();
@@ -293,8 +287,7 @@ class ChatServiceFilteringTest {
             var captured = executeChat("1", harness);
 
             String loadedContent = findMessageByContent(getSystemMessages(captured), "以下技能已加载");
-            assertNotNull(loadedContent);
-            assertTrue(loadedContent.contains("child_loaded"), "子会话应显示 CHILD 技能");
+            assertNull(loadedContent, "移除已加载技能提示词生成后，ChatService 不应再生成该消息");
         }
 
         @Test

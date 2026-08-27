@@ -1,0 +1,21 @@
+{
+  "plan_id": "plan_22b7f827-a2d9-421f-a14e-068b93d0d3f5",
+  "module_name": "agent-base",
+  "development_plan": "工具列表 HOOK 化与 buildContextSystemInfo 删除（agent-base 侧基础设施与 ChatService 改造）：\n1. HookPhase 枚举新增 BEFORE_TOOL_DEFINITIONS_BUILD（工具定义构建前触发）。\n2. 新增 ToolDefinitionsHookResult implements HookResult：携带 List<ToolConfigDTO> tools 字段，提供 getTools() 访问（null 安全）。\n3. 新增 ToolDefinitionsHookData implements HookData<ToolDefinitionsHookResult>：构造参数 List<ToolConfigDTO>（即 context.getTools() 的引用/拷贝，按现有 HookData 风格），提供 getTools() 访问。\n4. HookManager 新增方法 boolean hasHooks(HookPhase phase)：检查 systemHooks 与 regularPhaseHooks 缓存中该阶段是否注册了 HOOK（任一非空即 true）。\n5. ChatService 改造：\n   a. 删除 buildContextSystemInfo 方法、ContextSystemInfo record、parseLoadedSkills 方法、collectLoadedSkillMessages 方法；三路由方法清理 systemInfo 相关引用。\n   b. buildInstructions 签名调整：移除 systemInfo 与 loadedSkillMessages 参数，保留 anchorMessages、preSystemPrompt、postSystemPrompt、hookSystemPrompts（可用技能/已加载技能提示词已由 AvailableSkillsSystemHook 经 hookSystemPrompts 通道提供）。\n   c. chatViaChatCompletions：messages 不再 addAll(systemInfo.systemMessages())；postMessages 仅保留 anchorMessages 与 postSystemPrompt（collectLoadedSkillMessages 移除）；已加载技能日志 SkillLoadLogData 的记录时机需保留（如基于会话变量 _sys_loading_SKILLS 在构建提示词处记录，或由实现者按日志价值决策后在计划说明）。\n   d. buildToolDefinitions 重构（签名移除 filteredLoadedSkills 参数）：\n      - boolean hasToolHook = hookManager.hasHooks(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD)；\n      - 无工具处理 HOOK：toolConfigs = context.getTools()（默认回退）；\n      - 有工具处理 HOOK：hookManager.triggerHooks(BEFORE_TOOL_DEFINITIONS_BUILD, context, new ToolDefinitionsHookData(context.getTools())) 收集结果，用 castHookResult 过滤 ToolDefinitionsHookResult，合并其 getTools()（null 安全）；合并结果可能为空；\n      - 最终列表：toolConfigs 逐项（主会话跳过 sessionAuth==CHILD）经 invoker.toToolDefinition 转换 + 系统工具 toolDefinitions 始终附加（按名称去重），返回 List<ToolDefinition>。\n6. 适配 agent-base 受影响测试（ChatServiceTest、ChatServiceResponsesTest、ChatServiceFilteringTest、ChatServiceNoLoadSkillsTest、ChatServiceLogTest、ChatServiceHistoryGroupJsonTest 等）：删除相关断言（已加载技能提示词不再由 ChatService 生成、systemInfo 相关）、新增用例覆盖 hasHooks 判断与 buildToolDefinitions 三种情形（无 HOOK 回退 context.getTools()+系统工具；有 HOOK 非空结果；有 HOOK 空结果仅系统工具）、ToolDefinitionsHookResult/ToolDefinitionsHookData 基本用例。\n7. 运行 agent-base 模块 Maven 编译与全部测试，确保全部通过。",
+  "session_id": "ac47d987-feed-4f47-9765-19e25c560893",
+  "modified_files": [
+    "agent-base/src/main/java/com/ghost616/agentbase/enums/HookPhase.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ToolDefinitionsHookResult.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ToolDefinitionsHookData.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/HookManager.java",
+    "agent-base/src/main/java/com/ghost616/agentbase/service/agent/ChatService.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceResponsesTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceFilteringTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceHistoryGroupJsonTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/HookManagerTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/ToolDefinitionsHookDataTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/enums/HookPhaseTest.java",
+    "agent-base/src/test/java/com/ghost616/agentbase/service/agent/ChatServiceLogTest.java"
+  ]
+}

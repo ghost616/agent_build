@@ -85,7 +85,6 @@ class ChatServiceHistoryGroupJsonTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("base_prompt");
         when(context.getHistory()).thenReturn(history);
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(context.getRecentMessageCount()).thenReturn(recentCount);
         lenient().when(context.getConversationVariable(any())).thenReturn(expandedIndicesJson);

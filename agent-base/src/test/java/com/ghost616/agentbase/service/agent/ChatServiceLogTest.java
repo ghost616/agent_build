@@ -10,6 +10,7 @@ import com.ghost616.agentbase.enums.LogLevel;
 import com.ghost616.agentbase.enums.LogType;
 import com.ghost616.agentbase.service.agent.invoker.HistoryQuerySystemTool;
 import com.ghost616.agentbase.service.agent.invoker.HookManager;
+import com.ghost616.agentbase.service.agent.invoker.LoadSkillsSystemTool;
 import com.ghost616.agentbase.service.agent.invoker.SystemToolManager;
 import com.ghost616.agentbase.service.agent.invoker.ToolManager;
 import com.ghost616.agentbase.service.agent.log.AgentLog;
@@ -18,6 +19,7 @@ import com.ghost616.agentbase.service.agent.log.LogData;
 import com.ghost616.agentbase.service.agent.log.ModelCallLogData;
 import com.ghost616.agentbase.service.agent.log.RequestEntryLogData;
 import com.ghost616.agentbase.service.agent.log.RouteLogData;
+import com.ghost616.agentbase.service.agent.log.SkillLoadLogData;
 import com.ghost616.agentbase.service.agent.log.StreamEventLogData;
 import com.ghost616.agentbase.service.model.invoker.ModelInvoker;
 import com.ghost616.agentbase.service.model.invoker.ModelInvokerManager;
@@ -318,5 +320,84 @@ class ChatServiceLogTest {
         assertNotNull(historyExpand.getExpandedMessages());
         assertEquals(1, historyExpand.getExpandedMessages().size());
         assertTrue(historyExpand.getExpandedMessages().get(0).startsWith("【历史消息组2】"));
+    }
+
+    /**
+     * 以指定会话变量执行一次 chat 请求（chatCompletions 路径），返回捕获的日志列表。
+     */
+    private List<LogData> executeChatWithSessionVars(Map<String, String> sessionVars) {
+        registry.setAgentLog(agentLog);
+        AgentExecutionContext.AgentContextMutator mutator = new AgentExecutionContext.AgentContextMutator();
+        AgentExecutionContext context = new AgentExecutionContext(
+                "1", "agent-1", "sys_prompt", "model-1", null,
+                new ArrayList<>(), new ArrayList<>(), null, mutator,
+                sessionVars, new HashMap<>(), null, "", null, null);
+
+        AgentContextManager.Builder builder = mock(AgentContextManager.Builder.class);
+        when(agentContextManager.build(sessionId)).thenReturn(builder);
+        when(builder.modelIdOverride(any())).thenReturn(builder);
+        when(builder.build()).thenReturn(
+                new AgentContextManager.AgentSessionContext(context, mutator, new AtomicBoolean(false)));
+        when(systemToolManager.getToolDefinitions()).thenReturn(List.of());
+        lenient().when(chatDataProvider.getModelConfig(any())).thenReturn(
+                new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
+        lenient().when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
+        lenient().when(modelInvoker.invokeStream(any())).thenReturn(Flux.empty());
+
+        ChatRequest request = ChatRequest.builder()
+                .sessionId(sessionId).content("hello").conversationId("conv-1").build();
+        chatService.chat(request);
+
+        ArgumentCaptor<LogData> captor = ArgumentCaptor.forClass(LogData.class);
+        verify(agentLog, atLeast(1)).addLog(captor.capture());
+        return captor.getAllValues();
+    }
+
+    @Test
+    @DisplayName("会话变量 _sys_loading_SKILLS 非空时，chat() 应记录 SkillLoadLogData（已加载技能日志保留）")
+    void 已加载技能会话变量非空时记录SkillLoadLogData() {
+        Map<String, String> sessionVars = new HashMap<>();
+        sessionVars.put(LoadSkillsSystemTool.SESSION_KEY, "[\"skill-a\",\"skill-b\"]");
+
+        List<LogData> logs = executeChatWithSessionVars(sessionVars);
+
+        SkillLoadLogData skillLoad = logs.stream()
+                .filter(l -> l.logType() == LogType.SKILL_LOAD)
+                .map(l -> (SkillLoadLogData) l)
+                .findFirst().orElse(null);
+        assertNotNull(skillLoad, "应记录 SkillLoadLogData");
+        assertEquals(List.of("skill-a", "skill-b"), skillLoad.getSkillNames(), "skillNames 应来自会话变量解析结果");
+        assertEquals(2, skillLoad.getSkillCount(), "skillCount 应为技能名数量");
+        assertEquals(LogLevel.INFO, skillLoad.getLogLevel(), "日志级别应为 INFO");
+    }
+
+    @Test
+    @DisplayName("会话变量 _sys_loading_SKILLS 缺失/空列表时，不记录 SkillLoadLogData")
+    void 已加载技能会话变量缺失或空列表时不记录SkillLoadLogData() {
+        List<LogData> missingLogs = executeChatWithSessionVars(new HashMap<>());
+        assertTrue(missingLogs.stream().noneMatch(l -> l.logType() == LogType.SKILL_LOAD),
+                "会话变量缺失时不应记录 SkillLoadLogData");
+
+        Map<String, String> emptyVars = new HashMap<>();
+        emptyVars.put(LoadSkillsSystemTool.SESSION_KEY, "[]");
+        List<LogData> emptyLogs = executeChatWithSessionVars(emptyVars);
+        assertTrue(emptyLogs.stream().noneMatch(l -> l.logType() == LogType.SKILL_LOAD),
+                "会话变量为空列表时不应记录 SkillLoadLogData");
+    }
+
+    @Test
+    @DisplayName("会话变量 _sys_loading_SKILLS 为空白或非法 JSON 时，不记录 SkillLoadLogData 且不中断主流程")
+    void 已加载技能会话变量空白或解析失败时不记录SkillLoadLogData() {
+        Map<String, String> blankVars = new HashMap<>();
+        blankVars.put(LoadSkillsSystemTool.SESSION_KEY, "   ");
+        List<LogData> blankLogs = executeChatWithSessionVars(blankVars);
+        assertTrue(blankLogs.stream().noneMatch(l -> l.logType() == LogType.SKILL_LOAD),
+                "会话变量为空白时不应记录 SkillLoadLogData");
+
+        Map<String, String> invalidVars = new HashMap<>();
+        invalidVars.put(LoadSkillsSystemTool.SESSION_KEY, "not-a-json");
+        List<LogData> invalidLogs = executeChatWithSessionVars(invalidVars);
+        assertTrue(invalidLogs.stream().noneMatch(l -> l.logType() == LogType.SKILL_LOAD),
+                "会话变量解析失败时不应记录 SkillLoadLogData");
     }
 }

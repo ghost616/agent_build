@@ -100,3 +100,13 @@
 
 - **SubSessionResultProvider**：子会话结果回传 Provider 接口（integration 定义契约，由 platform-app 提供实现）。定义 shouldSendResultToParent(String sessionId) 判断指定子会话是否需要向父会话兜底回传执行结果。
 - **SubSessionResultFallbackHook**：子会话结果兜底回传 HOOK，implements SystemHook<ChatChunkHookData, EmptyHookResult>（适配 agent-base HookInvoker<D, R> 泛型化改造），由 HookManager 在 triggerHooks(phase) 中按 phase 分发。getPhase 返回 AFTER_MESSAGE_RECEIVE，getIndex=100 确保在 MessageSavePostHook（默认 0）之后执行，此时上下文历史已包含本次最终 assistant 消息。execute(AgentExecutionContext ctx, ChatChunkHookData data) 返回 EmptyHookResult（跳过分支返回 null，正常回传完成返回 EmptyHookResult.INSTANCE），内部经 data.getChatChunk() 读取 ChatChunk。由于 AFTER_MESSAGE_RECEIVE 仅在 ChatService 流式响应 doOnComplete 结束时触发一次（completeChunk 仅含 hasToolCalls 字段、无 finishReason），execute() 不再依赖 FinishReason.STOP 判定，仅在「子会话（非主会话）且最终回复无待执行工具调用（hasToolCalls 非 true）」时继续，经 SubSessionResultProvider 判定需要发送后，取 ctx.getHistory() 最后一条 assistant 消息 content，通过 ctx.sendParentMessage(content) 复用既有 sendParentMessage 通道回传父会话（保存 user 消息到父会话并推送 SEND_USER_MESSAGE）；非子会话、非 WEBSOCKET 子会话（由 Provider 实现内判定）、有工具调用、Provider 判定无需发送等情况一律静默跳过，不影响原有流程。
+## 技能提示词与已加载技能工具注入
+
+## 技能提示词与已加载技能工具注入
+
+- **AvailableSkillsSystemHook**：可用技能（SKILL）列表与已加载技能提示词 HOOK，implements SystemHook<SystemPromptHookData, SystemPromptHookResult>（无 Spring 依赖，可直接 new），getPhase 返回 AFTER_PRE_SYSTEM_PROMPT_BUILD。execute 先判断 data.getToolDefinitions() 是否包含 LoadSkillsSystemTool.FULL_TOOL_NAME（_sys_load_skills）同名工具定义（缺失返回 null），再生成两段提示词并拼接为一个 SystemPromptHookResult 返回：
+  - 可用技能列表段（在前）：遍历 ctx.getSkills()（null 安全），主会话跳过 sessionAuth==CHILD 的技能，含描述输出 "- name: description"、不含/空白描述输出 "- name"，提示文本逐字复刻原 ChatService.buildContextSystemInfo 逻辑（引导使用 load_skills 系统工具加载，禁止直接以技能名称作为工具调用）
+  - 已加载技能段（在后）：经 LoadedSkillsHelper 从会话变量 _sys_loading_SKILLS 读取并过滤已加载技能，生成"以下技能已加载，请按照其提示词指导执行任务：\n\n" + "## 技能名\n" + 提示词（非空时追加）
+  - 拼接规则：可用技能列表在前、已加载技能在后（两段间以 "\n\n" 分隔）；无可用技能但有已加载技能时仅返回已加载段；两者皆无返回 null
+- **LoadedSkillsToolHook**：已加载技能工具注入 HOOK，implements SystemHook<ToolDefinitionsHookData, ToolDefinitionsHookResult>，getPhase 返回 BEFORE_TOOL_DEFINITIONS_BUILD（ChatService 检测到该阶段存在 HOOK 时以返回结果接管工具列表）。execute 从会话变量（LoadSkillsSystemTool.SESSION_KEY）读取已加载技能名，经 LoadedSkillsHelper 过滤出已加载技能（主会话跳过 CHILD），收集这些技能的 skillTools（null 安全）作为追加工具；返回 ToolDefinitionsHookResult 其 tools = 基础工具（data.getTools()）+ 追加的已加载技能工具（按名称/ID 去重，name 非空优先，保持顺序）；无可追加工具时透传 data.getTools() 本身，data==null 返回 null 工具列表
+- **LoadedSkillsHelper**：已加载技能解析辅助类（包级私有），parseLoadedSkillNames(ctx) 从会话变量 _sys_loading_SKILLS 读取 JSON 解析技能名列表（缺失/空白/JSON 解析失败降级返回空列表，经 JsonMapper.MAPPER 与 TypeReference<List<String>>），collectLoadedSkills(ctx) 从 ctx.getSkills() 按名称过滤出已加载技能配置（主会话跳过 sessionAuth==CHILD），复刻原 ChatService.parseLoadedSkills 逻辑

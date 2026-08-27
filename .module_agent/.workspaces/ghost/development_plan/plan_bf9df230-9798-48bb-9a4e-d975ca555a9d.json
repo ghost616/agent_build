@@ -1,0 +1,13 @@
+{
+  "plan_id": "plan_bf9df230-9798-48bb-9a4e-d975ca555a9d",
+  "module_name": "agent-integration",
+  "development_plan": "已加载技能提示词扩展与工具处理 HOOK 实现（agent-integration，依赖 agent-base 新增的 BEFORE_TOOL_DEFINITIONS_BUILD/ToolDefinitionsHookResult/ToolDefinitionsHookData）：\n1. AvailableSkillsSystemHook 扩展：execute 中除现有可用技能列表外，从会话变量读取已加载技能（LoadSkillsSystemTool.SESSION_KEY 经 ctx.getSessionVariable 读取、JSON 解析技能名列表，参考原 ChatService.parseLoadedSkills 逻辑），从 ctx.getSkills() 过滤出已加载技能（主会话跳过 sessionAuth==CHILD），生成\"以下技能已加载，请按照其提示词指导执行任务：\\n\\n## 技能名\\n提示词...\"提示词文本；与可用技能列表两段拼接为一个 SystemPromptHookResult 返回（可用技能列表在前、已加载技能在后；无可用技能且有已加载技能时仅返回已加载段；两者皆无返回 null；hasLoadSkillsTool 为 false 返回 null）。\n2. 新增 LoadedSkillsToolHook implements SystemHook<ToolDefinitionsHookData, ToolDefinitionsHookResult>：\n   a. getPhase() 返回 HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD。\n   b. execute(AgentExecutionContext ctx, ToolDefinitionsHookData data)：从会话变量读已加载技能名（LoadSkillsSystemTool.SESSION_KEY），从 ctx.getSkills() 过滤出已加载技能（主会话跳过 CHILD），收集这些技能的 skillTools（ToolConfigDTO 列表，null 安全）作为追加工具；返回 ToolDefinitionsHookResult，其 tools = data.getTools()（基础）+ 追加的已加载技能工具（按名称/ID 去重，保持顺序）；无可追加工具时返回 data.getTools() 本身（仍非空）或按实现保持语义（有工具处理 HOOK 存在即接管工具列表，返回内容含 context.getTools() 与已加载技能工具）。\n3. 新增/扩展测试：AvailableSkillsSystemHook 已加载技能提示词段（含提示词、会话变量缺失、空技能、主会话 CHILD 过滤）、两段拼接；LoadedSkillsToolHook 用例（无已加载技能返回基础列表、有已加载技能追加 skillTools、会话变量解析失败降级、主会话 CHILD 过滤）。\n4. 运行 agent-integration 模块 Maven 编译与全部测试，确保全部通过。",
+  "session_id": "59bda1d4-716b-42f7-bed0-189bc0f0f86c",
+  "modified_files": [
+    "agent-integration/src/main/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHook.java",
+    "agent-integration/src/main/java/com/ghost616/agentinteg/hook/LoadedSkillsToolHook.java",
+    "agent-integration/src/main/java/com/ghost616/agentinteg/hook/LoadedSkillsHelper.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHookTest.java",
+    "agent-integration/src/test/java/com/ghost616/agentinteg/hook/LoadedSkillsToolHookTest.java"
+  ]
+}

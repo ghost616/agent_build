@@ -8,7 +8,9 @@ import com.ghost616.agentbase.dto.model.ImageContent;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.dto.model.ModelConfigData;
 import com.ghost616.agentbase.dto.model.ToolCall;
+import com.ghost616.agentbase.dto.model.ToolDefinition;
 import com.ghost616.agentbase.dto.model.ToolInfo;
+import com.ghost616.agentbase.dto.tool.ToolConfigDTO;
 import com.ghost616.agentbase.enums.FinishReason;
 import com.ghost616.agentbase.enums.HookPhase;
 import com.ghost616.agentbase.service.agent.invoker.ChatChunkHookData;
@@ -17,6 +19,8 @@ import com.ghost616.agentbase.service.agent.invoker.HookResult;
 import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookData;
 import com.ghost616.agentbase.service.agent.invoker.SystemPromptHookResult;
 import com.ghost616.agentbase.service.agent.invoker.SystemToolManager;
+import com.ghost616.agentbase.service.agent.invoker.ToolDefinitionsHookData;
+import com.ghost616.agentbase.service.agent.invoker.ToolDefinitionsHookResult;
 import com.ghost616.agentbase.service.agent.invoker.ToolManager;
 import com.ghost616.agentbase.service.model.invoker.ModelInvoker;
 import com.ghost616.agentbase.service.model.invoker.ModelInvokerManager;
@@ -97,7 +101,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -124,7 +127,6 @@ class ChatServiceTest {
         when(builder.build()).thenReturn(sessionCtx);
         when(context.getSystemPrompt()).thenReturn("");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -151,7 +153,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -177,7 +178,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -204,7 +204,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("base_prompt");
         when(context.getHistory()).thenReturn(history);
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(context.getRecentMessageCount()).thenReturn(recentCount);
         lenient().when(context.getConversationVariable(any())).thenReturn(expandedIndicesJson);
@@ -446,7 +445,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -473,7 +471,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -503,7 +500,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(msgBuilder);
         when(context.getSystemPrompt()).thenReturn("");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -532,7 +528,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(msgBuilder);
         when(context.getSystemPrompt()).thenReturn("");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -564,7 +559,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("base_prompt");
         when(context.getHistory()).thenReturn(List.of(userEntry));
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -669,7 +663,6 @@ class ChatServiceTest {
         when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
         when(context.getSystemPrompt()).thenReturn("base_prompt");
         when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
-        when(context.getSkills()).thenReturn(null);
         when(context.getTools()).thenReturn(java.util.Collections.emptyList());
         when(systemToolManager.getToolDefinitions()).thenReturn(java.util.Collections.emptyList());
         when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
@@ -763,5 +756,97 @@ class ChatServiceTest {
                 "user", "hello", null, null, java.time.LocalDateTime.now(), List.of(), null, null, null, null, true));
         assertDoesNotThrow(() -> executeFoldChat(history, 3, null));
         verify(modelInvoker).invokeStream(any());
+    }
+
+    /**
+     * 以指定工具配置/系统工具列表执行一次 chat 请求（chatViaChatCompletions），
+     * 用于验证 buildToolDefinitions 的工具来源逻辑。
+     */
+    private com.ghost616.agentbase.dto.model.ChatRequest executeChatWithTools(
+            List<ToolConfigDTO> tools, List<ToolDefinition> systemTools) {
+        ChatRequest request = ChatRequest.builder().sessionId(sessionId).content("hello").conversationId("conv-1").build();
+        AgentContextManager.AgentSessionContext sessionCtx =
+                new AgentContextManager.AgentSessionContext(context, mutator, new java.util.concurrent.atomic.AtomicBoolean(false));
+
+        when(agentContextManager.build(sessionId)).thenReturn(builder);
+        when(builder.modelIdOverride(any())).thenReturn(builder);
+        when(builder.build()).thenReturn(sessionCtx);
+        when(sessionManager.messageSave()).thenReturn(mock(SessionManager.MessageSaveBuilder.class, RETURNS_SELF));
+        when(context.getSystemPrompt()).thenReturn("base_prompt");
+        when(context.getHistory()).thenReturn(java.util.Collections.emptyList());
+        when(context.getTools()).thenReturn(tools);
+        when(context.getRecentMessageCount()).thenReturn(3);
+        lenient().when(context.getConversationVariable(any())).thenReturn(null);
+        when(systemToolManager.getToolDefinitions()).thenReturn(systemTools);
+        when(chatDataProvider.getModelConfig(any())).thenReturn(new ModelConfigData("1", "key", "url", "model", 0.7, 4096, "openai", null));
+        when(modelInvokerManager.getInvoker(any())).thenReturn(modelInvoker);
+        when(modelInvoker.invokeStream(any())).thenReturn(Flux.empty());
+        lenient().when(modelInvoker.toToolDefinition(any())).thenAnswer(inv -> {
+            ToolConfigDTO t = inv.getArgument(0);
+            return ToolDefinition.builder().name(t.getName()).build();
+        });
+
+        chatService.chat(request);
+
+        ArgumentCaptor<com.ghost616.agentbase.dto.model.ChatRequest> captor =
+                ArgumentCaptor.forClass(com.ghost616.agentbase.dto.model.ChatRequest.class);
+        verify(modelInvoker).invokeStream(captor.capture());
+        return captor.getValue();
+    }
+
+    private List<String> toolNamesOf(com.ghost616.agentbase.dto.model.ChatRequest captured) {
+        return captured.getTools() != null
+                ? captured.getTools().stream().map(ToolDefinition::getName).toList() : List.of();
+    }
+
+    @Test
+    void buildToolDefinitions_无HOOK时回退contextTools并与系统工具合并() {
+        List<ToolConfigDTO> tools = List.of(ToolConfigDTO.builder().name("ctx_tool").build());
+        List<ToolDefinition> systemTools = List.of(ToolDefinition.builder().name("sys_tool").build());
+
+        com.ghost616.agentbase.dto.model.ChatRequest captured = executeChatWithTools(tools, systemTools);
+
+        List<String> toolNames = toolNamesOf(captured);
+        assertTrue(toolNames.contains("ctx_tool"), "无 HOOK 时应回退使用 context.getTools()");
+        assertTrue(toolNames.contains("sys_tool"), "系统工具应始终附加");
+        verify(hookManager, never()).triggerHooks(eq(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD), eq(context), any(ToolDefinitionsHookData.class));
+    }
+
+    @Test
+    void buildToolDefinitions_有HOOK且返回非空结果时使用HOOK工具与系统工具() {
+        when(hookManager.hasHooks(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD)).thenReturn(true);
+        lenient().when(hookManager.triggerHooks(eq(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD), eq(context), any(ToolDefinitionsHookData.class)))
+                .thenReturn(List.of(new ToolDefinitionsHookResult(
+                        List.of(ToolConfigDTO.builder().name("hook_tool").build()))));
+        when(hookManager.castHookResult(any(HookResult.class), eq(ToolDefinitionsHookResult.class)))
+                .thenAnswer(inv -> {
+                    HookResult result = inv.getArgument(0);
+                    return result instanceof ToolDefinitionsHookResult ? (ToolDefinitionsHookResult) result : null;
+                });
+
+        // context 工具（ctx_tool）应被 HOOK 结果替换，不出现
+        List<ToolConfigDTO> tools = List.of(ToolConfigDTO.builder().name("ctx_tool").build());
+        List<ToolDefinition> systemTools = List.of(ToolDefinition.builder().name("sys_tool").build());
+        com.ghost616.agentbase.dto.model.ChatRequest captured = executeChatWithTools(tools, systemTools);
+
+        List<String> toolNames = toolNamesOf(captured);
+        assertTrue(toolNames.contains("hook_tool"), "有 HOOK 时应使用 HOOK 提供的工具");
+        assertTrue(toolNames.contains("sys_tool"), "系统工具应始终附加");
+        assertFalse(toolNames.contains("ctx_tool"), "有 HOOK 时 context.getTools() 不应直接进入工具列表");
+        verify(hookManager).triggerHooks(eq(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD), eq(context), any(ToolDefinitionsHookData.class));
+    }
+
+    @Test
+    void buildToolDefinitions_有HOOK但结果为空时仅系统工具() {
+        when(hookManager.hasHooks(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD)).thenReturn(true);
+        lenient().when(hookManager.triggerHooks(eq(HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD), eq(context), any(ToolDefinitionsHookData.class)))
+                .thenReturn(List.of());
+
+        List<ToolConfigDTO> tools = List.of(ToolConfigDTO.builder().name("ctx_tool").build());
+        List<ToolDefinition> systemTools = List.of(ToolDefinition.builder().name("sys_tool").build());
+        com.ghost616.agentbase.dto.model.ChatRequest captured = executeChatWithTools(tools, systemTools);
+
+        assertEquals(List.of("sys_tool"), toolNamesOf(captured),
+                "HOOK 合并结果为空时工具列表应仅含系统工具");
     }
 }

@@ -712,6 +712,18 @@
     {
       "path": "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/SystemPromptHookDataTest.java",
       "description": "SystemPromptHookData 防御性深拷贝行为测试：null 输入视为空列表、列表复制、单个元素 builder 重建、parameters Map 拷贝、返回列表不可变，以及 SystemPromptHookResult.getSystemPrompt 访问器。"
+    },
+    {
+      "description": "工具定义构建 HOOK 执行结果（implements HookResult）：携带 List<ToolConfigDTO> tools 字段并提供 getTools() 访问（可能返回 null，调用方需 null 安全），由 BEFORE_TOOL_DEFINITIONS_BUILD 阶段 HOOK 返回，供 ChatService.buildToolDefinitions 合并工具配置列表。",
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ToolDefinitionsHookResult.java"
+    },
+    {
+      "description": "工具定义构建数据载体（implements HookData<ToolDefinitionsHookResult>）：构造参数 List<ToolConfigDTO>（即 context.getTools() 的引用，按现有 HookData 风格直接持有），提供 getTools() 访问；由 ChatService 在 BEFORE_TOOL_DEFINITIONS_BUILD 阶段携带会话上下文工具配置列表供 HOOK 消费以调整/替换模型工具定义构建来源。",
+      "path": "agent-base/src/main/java/com/ghost616/agentbase/service/agent/invoker/ToolDefinitionsHookData.java"
+    },
+    {
+      "description": "ToolDefinitionsHookResult 与 ToolDefinitionsHookData 基本用例测试：getTools 返回构造列表/引用持有、null 构造返回 null 的 null 安全语义。",
+      "path": "agent-base/src/test/java/com/ghost616/agentbase/service/agent/invoker/ToolDefinitionsHookDataTest.java"
     }
   ]
 }

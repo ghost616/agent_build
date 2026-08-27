@@ -8,5 +8,18 @@
     ],
     "summary": "执行总结：本轮新增 2 个文件——AvailableSkillsSystemHook.java（实现 SystemHook<SystemPromptHookData, SystemPromptHookResult>，getPhase=AFTER_PRE_SYSTEM_PROMPT_BUILD；execute 先判断工具定义列表含 _sys_load_skills 工具（否则返回 null），再遍历 ctx.getSkills()（null 安全）构建可用技能列表（主会话跳过 CHILD 技能，空则返回 null），提示词文本逐字复刻原 ChatService.buildContextSystemInfo 逻辑并返回 SystemPromptHookResult；无 Spring 依赖可直接 new）与 AvailableSkillsSystemHookTest.java（15 个用例）。首轮离朱测试发现 1 个失败用例（空白描述被 isEmpty 误判为有描述），已按推荐方案将判定改为 isBlank() 修复，重测全部通过。\n测试总结：全部测试通过。mvn -B -pl agent-integration -am test（Java 21/Maven 3.9.16）：agent-base + agent-integration 编译 SUCCESS；agent-integration 全量 249 run / 0 failure / 0 error / 0 skipped，BUILD SUCCESS；新增 AvailableSkillsSystemHookTest 15/15 通过，既有 17 个测试类无回归。无环境问题。",
     "errors": []
+  },
+  {
+    "plan_id": "plan_bf9df230-9798-48bb-9a4e-d975ca555a9d",
+    "plan": "已加载技能提示词扩展与工具处理 HOOK 实现",
+    "modified_files": [
+      "agent-integration/src/main/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHook.java",
+      "agent-integration/src/main/java/com/ghost616/agentinteg/hook/LoadedSkillsToolHook.java",
+      "agent-integration/src/main/java/com/ghost616/agentinteg/hook/LoadedSkillsHelper.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHookTest.java",
+      "agent-integration/src/test/java/com/ghost616/agentinteg/hook/LoadedSkillsToolHookTest.java"
+    ],
+    "summary": "执行总结：本轮完成 5 个文件——1) 新增 LoadedSkillsHelper.java（包级私有辅助类，parseLoadedSkillNames 从会话变量 _sys_loading_SKILLS 解析技能名列表、collectLoadedSkills 从 ctx.getSkills() 过滤已加载技能，主会话跳过 CHILD，缺失/空白/解析失败降级空列表）；2) 扩展 AvailableSkillsSystemHook.java（可用技能列表段在前 + 已加载技能段在后两段拼接为一个 SystemPromptHookResult，无可用技能仅有已加载时仅返回已加载段，两者皆无返回 null，hasLoadSkillsTool=false 返回 null，已加载段文本逐字复刻原 ChatService 逻辑）；3) 新增 LoadedSkillsToolHook.java（SystemHook<ToolDefinitionsHookData, ToolDefinitionsHookResult>，BEFORE_TOOL_DEFINITIONS_BUILD，收集已加载技能 skillTools 追加到基础工具列表，按名称/ID 去重保持顺序，无可追加透传基础列表，data null 返回 null 工具）；4) AvailableSkillsSystemHookTest 扩至 21 用例；5) 新增 LoadedSkillsToolHookTest 9 用例。元数据已更新：update_definition 注册 5 个文件、append_history 记录变更、update_spec 新增「技能提示词与已加载技能工具注入」section。\n测试总结：全部测试通过。mvn -B -pl agent-integration -am test（Java 21/Maven 3.9.16）：agent-base + agent-integration 编译 SUCCESS；agent-integration 全量 264 run / 0 failure / 0 error / 0 skipped，BUILD SUCCESS（AvailableSkillsSystemHookTest 21/21、LoadedSkillsToolHookTest 9/9，既有 16 个测试类无回归，用例总数 249→264 与新增吻合）。无环境问题。",
+    "errors": []
   }
 ]

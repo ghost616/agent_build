@@ -208,6 +208,26 @@
     {
       "path": "agent-integration/src/test/java/com/ghost616/agentinteg/hook/SubSessionResultFallbackHookTest.java",
       "description": "SubSessionResultFallbackHook 单元测试（JUnit 5 + Mockito），11 个用例覆盖 getPhase/getIndex 元数据、非子会话跳过、data 为 null/chunk 为 null 跳过、hasToolCalls=true 跳过、doOnComplete 完整 chunk 仅含 hasToolCalls 字段继续执行、Provider 判定无需发送跳过、需要发送时取最后一条 assistant 消息回传、history 无 assistant/为空/null/内容空白跳过；使用 new ChatChunkHookData(...) 构造数据载体。"
+    },
+    {
+      "description": "可用技能（SKILL）列表与已加载技能提示词 HOOK（implements SystemHook<SystemPromptHookData, SystemPromptHookResult>，无 Spring 依赖可直接 new）：getPhase 返回 HookPhase.AFTER_PRE_SYSTEM_PROMPT_BUILD；execute 先判断 data.getToolDefinitions() 是否包含 LoadSkillsSystemTool.FULL_TOOL_NAME 同名工具定义（缺失返回 null），生成两段提示词并拼接为一个 SystemPromptHookResult 返回——可用技能列表段在前（遍历 ctx.getSkills()，主会话跳过 sessionAuth==CHILD，含描述输出 - name: description、不含/空白描述输出 - name，结尾引导使用 load_skills 系统工具加载），已加载技能段在后（经 LoadedSkillsHelper 从会话变量 _sys_loading_SKILLS 解析已加载技能，生成'以下技能已加载，请按照其提示词指导执行任务'提示词，含 ## 技能名 与提示词）；无可用技能但有已加载技能时仅返回已加载段，两者皆无返回 null",
+      "path": "agent-integration/src/main/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHook.java"
+    },
+    {
+      "description": "已加载技能工具注入 HOOK（implements SystemHook<ToolDefinitionsHookData, ToolDefinitionsHookResult>，无 Spring 依赖可直接 new）：getPhase 返回 HookPhase.BEFORE_TOOL_DEFINITIONS_BUILD；execute 从会话变量（LoadSkillsSystemTool.SESSION_KEY）读取已加载技能名，经 LoadedSkillsHelper 过滤出已加载技能（主会话跳过 sessionAuth==CHILD），收集这些技能的 skillTools（null 安全）作为追加工具，返回 ToolDefinitionsHookResult 其 tools = 基础工具（data.getTools()）+ 追加的已加载技能工具（按名称/ID 去重，name 非空优先，保持顺序）；无可追加工具时透传 data.getTools() 本身（ChatService 在存在该阶段 HOOK 时以返回结果接管工具列表），data==null 返回 null 工具列表，会话变量缺失/解析失败降级为空追加",
+      "path": "agent-integration/src/main/java/com/ghost616/agentinteg/hook/LoadedSkillsToolHook.java"
+    },
+    {
+      "description": "已加载技能解析辅助类（包级私有 final，不可实例化）：parseLoadedSkillNames(ctx) 从会话变量 LoadSkillsSystemTool.SESSION_KEY（_sys_loading_SKILLS）读取 JSON 并解析技能名列表（缺失/空白/JSON 解析失败一律降级返回空列表，经 JsonMapper.MAPPER 与 TypeReference<List<String>> 解析）；collectLoadedSkills(ctx) 从 ctx.getSkills() 按名称过滤出已加载技能配置（null 安全，主会话跳过 sessionAuth==CHILD）。供 AvailableSkillsSystemHook 与 LoadedSkillsToolHook 共用，复刻原 ChatService.parseLoadedSkills 逻辑",
+      "path": "agent-integration/src/main/java/com/ghost616/agentinteg/hook/LoadedSkillsHelper.java"
+    },
+    {
+      "description": "AvailableSkillsSystemHook 单元测试（21 用例）：getPhase 元数据；hasLoadSkillsTool 存在/缺失分支（不含/空列表/null 工具定义/ctx null/包含）；可用技能列表构建（含描述/不含描述/空白描述文本断言、多技能按序多行）；主会话过滤 CHILD（过滤/全部 CHILD 返回 null/非主会话不过滤）；空技能与 null 技能列表返回 null；已加载技能提示词段（两段拼接可用在前已加载在后、无可用技能仅返回已加载段、已加载技能无提示词仅生成 name 标题、会话变量解析失败降级、主会话已加载 CHILD 被过滤返回 null、非主会话两段均包含）",
+      "path": "agent-integration/src/test/java/com/ghost616/agentinteg/hook/AvailableSkillsSystemHookTest.java"
+    },
+    {
+      "description": "LoadedSkillsToolHook 单元测试（9 用例）：getPhase 返回 BEFORE_TOOL_DEFINITIONS_BUILD；无已加载技能返回基础列表本身；会话变量缺失返回基础列表；有已加载技能追加 skillTools；会话变量解析失败降级返回基础列表；主会话已加载 CHILD 技能其 skillTools 不追加；追加工具与基础工具同名按名称去重保持基础顺序；data 为 null 返回 null 工具列表；ctx 为 null 返回基础列表",
+      "path": "agent-integration/src/test/java/com/ghost616/agentinteg/hook/LoadedSkillsToolHookTest.java"
     }
   ]
 }
