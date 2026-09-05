@@ -113,11 +113,11 @@ class DefaultMessageSenderTest {
         assertNull(recording.seenSession);
     }
 
-    // ========== 评估拦截仅针对 SendUserMessage（写入评估执行上下文槽位、不推送、不调度异步）；
+    // ========== 评估拦截仅针对 SendUserMessage（追加写入评估执行上下文待处理列表、不推送、不调度异步）；
     // 其余消息（含评估中的非 SendUserMessage）一律走统一异步分发通道 ==========
 
     @Test
-    void send_评估执行标记生效_SendUserMessage写入槽位且不推送() throws Exception {
+    void send_评估执行标记生效_SendUserMessage追加写入待处理列表且不推送() throws Exception {
         EvaluationExecutionContext.set(EvaluationExecutionContext.create());
         SendUserMessage message = new SendUserMessage("child-1", "hello", "conv-1", List.of("parent-1", "main-1"));
         AtomicBoolean asyncEntered = new AtomicBoolean();
@@ -131,12 +131,44 @@ class DefaultMessageSenderTest {
 
         sender.send(message);
 
-        // 同步拦截：写入当前线程评估执行上下文槽位（取出即清），不调度异步执行通道、不触发 WebSocket 推送
+        // 同步拦截：追加写入当前线程评估执行上下文待处理列表（取出即移除），不调度异步执行通道、不触发 WebSocket 推送
         EvaluationExecutionContext evalContext = EvaluationExecutionContext.get();
         assertNotNull(evalContext);
-        SendUserMessage taken = evalContext.getAndClearPendingSendUserMessage();
+        SendUserMessage taken = evalContext.pollNextPendingSendUserMessage();
         assertSame(message, taken);
-        assertNull(evalContext.getAndClearPendingSendUserMessage());
+        assertNull(evalContext.pollNextPendingSendUserMessage());
+        Thread.sleep(100);
+        assertFalse(asyncEntered.get(), "评估拦截 SendUserMessage 不应调度异步执行");
+        verifyNoInteractions(pushService);
+    }
+
+    @Test
+    void send_评估执行标记生效_连续多条SendUserMessage均追加不被丢() throws Exception {
+        EvaluationExecutionContext.set(EvaluationExecutionContext.create());
+        AtomicBoolean asyncEntered = new AtomicBoolean();
+        ThreadVariableHandler recording = () -> new ThreadVariableWrapper() {
+            @Override
+            public void apply() {
+                asyncEntered.set(true);
+            }
+        };
+        DefaultMessageSender sender = new DefaultMessageSender(pushService, recording);
+
+        // 同一驱动窗口内连续产生多条 SendUserMessage（如并发/嵌套子链路），追加语义下全部保留、不被覆盖
+        SendUserMessage first = new SendUserMessage("child-1", "first", "conv-1", List.of("parent-1", "main-1"));
+        SendUserMessage second = new SendUserMessage("child-2", "second", "conv-2", List.of("main-1"));
+        SendUserMessage third = new SendUserMessage("child-3", "third", "conv-3", List.of("main-1"));
+        sender.send(first);
+        sender.send(second);
+        sender.send(third);
+
+        // 同步拦截：三条消息按产生顺序全部追加进待处理列表（无覆盖丢失）
+        EvaluationExecutionContext evalContext = EvaluationExecutionContext.get();
+        assertNotNull(evalContext);
+        assertSame(first, evalContext.pollNextPendingSendUserMessage(), "第一条待处理消息不应被后续覆盖");
+        assertSame(second, evalContext.pollNextPendingSendUserMessage(), "第二条待处理消息不应被后续覆盖");
+        assertSame(third, evalContext.pollNextPendingSendUserMessage(), "第三条待处理消息应保留");
+        assertNull(evalContext.pollNextPendingSendUserMessage(), "消费完所有追加消息后列表为空");
         Thread.sleep(100);
         assertFalse(asyncEntered.get(), "评估拦截 SendUserMessage 不应调度异步执行");
         verifyNoInteractions(pushService);
@@ -158,11 +190,11 @@ class DefaultMessageSenderTest {
         sender.send(unknown);
 
         // 评估下非 SendUserMessage 不再被同步吞掉：正常进入异步执行通道
-        // （dispatch 对未支持类型仅 log.debug，不推送），不写入评估执行上下文槽位
+        // （dispatch 对未支持类型仅 log.debug，不推送），不写入评估执行上下文待处理列表
         awaitUntil(asyncEntered::get);
         EvaluationExecutionContext evalContext = EvaluationExecutionContext.get();
         assertNotNull(evalContext);
-        assertNull(evalContext.getAndClearPendingSendUserMessage());
+        assertNull(evalContext.pollNextPendingSendUserMessage());
         Thread.sleep(100);
         verifyNoInteractions(pushService);
     }

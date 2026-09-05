@@ -2,10 +2,10 @@ package com.ghost616.platform.session;
 
 import com.ghost616.agentbase.sendmessage.SendUserMessage;
 
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * 评估执行上下文：承载单次「评估后台执行」运行期的执行标记与待处理 {@link SendUserMessage} 槽位。
+ * 评估执行上下文：承载单次「评估后台执行」运行期的执行标记与待处理 {@link SendUserMessage} 有序列表。
  *
  * <p>由 {@link ContextThreadVariableHandler} 统一传播：评估执行入口
  * （{@code AsyncEvaluationExecutor.executeAsync}）在当前线程创建并写入实例，
@@ -13,14 +13,16 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@code ThreadVariableHandler.wrap()} 捕获当前线程的实例快照，异步线程开始执行时
  * {@code apply()} 恢复、finally 中清理，保证评估执行标记与待处理消息跨线程可见且不串号/泄漏。</p>
  *
- * <p>槽位语义：单值即可——写入覆盖当前槽位，取出即清空，由
- * {@link com.ghost616.platform.service.evaluation.AsyncEvaluationExecutor} 的消息驱动循环消费。</p>
+ * <p>待处理列表语义：并发安全的有序多值队列（FIFO）——同一驱动窗口内并发/连续产生的多条
+ * {@link SendUserMessage} 均被保留并按产生顺序消费（不再单值覆盖丢消息），追加（{@link #addPendingSendUserMessage}）
+ * 与取出（{@link #pollNextPendingSendUserMessage}，取出即移除）分离，由
+ * {@link com.ghost616.platform.service.evaluation.AsyncEvaluationExecutor} 的消息驱动循环逐条消费至空。</p>
  */
 public final class EvaluationExecutionContext {
 
     private static final ThreadLocal<EvaluationExecutionContext> CURRENT = new ThreadLocal<>();
 
-    private final AtomicReference<SendUserMessage> pendingSendUserMessage = new AtomicReference<>();
+    private final ConcurrentLinkedQueue<SendUserMessage> pendingSendUserMessages = new ConcurrentLinkedQueue<>();
 
     private EvaluationExecutionContext() {
     }
@@ -67,23 +69,24 @@ public final class EvaluationExecutionContext {
     }
 
     /**
-     * 将待处理的 {@link SendUserMessage} 写入槽位（覆盖当前槽值）。
+     * 将待处理的 {@link SendUserMessage} 追加到待处理列表末尾（追加语义，不再覆盖）。
      *
      * <p>评估后台执行无 WebSocket 前端，{@code DefaultMessageSender} 在评估执行标记生效时
-     * 拦截 SEND_USER_MESSAGE 事件并调用本方法写入槽位，由消息驱动循环消费。</p>
+     * 拦截 SEND_USER_MESSAGE 事件并调用本方法追加写入，由消息驱动循环按产生顺序逐条消费，
+     * 同一驱动窗口内并发/连续产生的多条消息均不丢失。</p>
      *
      * @param message 待处理的发送用户消息事件
      */
-    public void setPendingSendUserMessage(SendUserMessage message) {
-        pendingSendUserMessage.set(message);
+    public void addPendingSendUserMessage(SendUserMessage message) {
+        pendingSendUserMessages.add(message);
     }
 
     /**
-     * 取出并清空槽位中的待处理 {@link SendUserMessage}（取出即清）。
+     * 取出待处理列表队首的 {@link SendUserMessage} 并移除（取出即清）。
      *
-     * @return 槽位中的消息；槽位为空时返回 null
+     * @return 队首消息；列表为空时返回 null
      */
-    public SendUserMessage getAndClearPendingSendUserMessage() {
-        return pendingSendUserMessage.getAndSet(null);
+    public SendUserMessage pollNextPendingSendUserMessage() {
+        return pendingSendUserMessages.poll();
     }
 }

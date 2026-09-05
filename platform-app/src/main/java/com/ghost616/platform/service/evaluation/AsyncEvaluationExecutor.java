@@ -3,6 +3,7 @@ package com.ghost616.platform.service.evaluation;
 import com.ghost616.agentbase.core.ThreadVariableWrapper;
 import com.ghost616.agentbase.sendmessage.SendUserMessage;
 import com.ghost616.agentbase.service.agent.AgentMessageProxy;
+import com.ghost616.agentbase.service.agent.ChatDataCacheManager;
 import com.ghost616.agentbase.service.agent.ChatService;
 import com.ghost616.agentbase.service.agent.MessageDataProvider;
 import com.ghost616.platform.dto.evaluation.EvaluationExecutionStatusDTO;
@@ -23,8 +24,10 @@ import java.util.Map;
  * <p>负责 headless 执行评估：逐条重放基准用户消息，期间完整执行主会话 + 子会话全链路
  * （含多级嵌套）。执行入口创建并写入 {@link EvaluationExecutionContext}（评估执行标记），
  * 经 {@link com.ghost616.platform.session.ContextThreadVariableHandler} 传播到工具异步线程、
- * 子会话后台驱动线程与消息分发线程；每条基准用户消息执行后循环消费上下文槽位中的
- * {@link SendUserMessage}（覆盖子→父 sendParentMessage 回传续接与消息驱动型子会话），
+ * 子会话后台驱动线程与消息分发线程；每条基准用户消息执行后逐条消费上下文待处理列表中的
+ * {@link SendUserMessage}（覆盖子→父 sendParentMessage 回传续接与消息驱动型子会话；消费前按
+ * 事件原始 conversationId 移除目标会话已存在的缓存条目，避免驱动重入时 DUPLICATE_KEY/追加已结束缓存，
+ * 并透传该 conversationId 驱动保持与已落库消息的对话归组一致），
  * 主/子全链执行完成才置 COMPLETED，再生成评估结果。</p>
  */
 @Slf4j
@@ -37,6 +40,7 @@ public class AsyncEvaluationExecutor {
 
     private final AgentMessageProxy agentMessageProxy;
     private final EvaluationResultGenerateService evaluationResultGenerateService;
+    private final ChatDataCacheManager chatDataCacheManager;
 
     /**
      * 异步生成评估结果。任务提交方（{@link EvaluationExecutionService}）通过
@@ -127,7 +131,7 @@ public class AsyncEvaluationExecutor {
                                 content,
                                 null,
                                 executionSession.getThinking());
-                        // 消费评估执行上下文槽位中的待处理 SendUserMessage
+                        // 逐条消费评估执行上下文待处理列表中的 SendUserMessage
                         // （WEBSOCKET 型子会话打开/子→父 sendParentMessage 回传续接/消息驱动型子会话）
                         drainPendingSendUserMessages(executionSessionId, executionSession.getThinking());
                         log.debug("评估执行消息处理完成, sessionId={}, step={}/{}", executionSessionId, i + 1, total);
@@ -170,16 +174,23 @@ public class AsyncEvaluationExecutor {
     }
 
     /**
-     * 循环消费评估执行上下文槽位中的待处理 {@link SendUserMessage}，直至槽位为空。
+     * 逐条消费评估执行上下文待处理列表中的 {@link SendUserMessage}，直至列表为空。
      *
      * <p>每条消息按其目标 sessionId（子会话或父会话）执行 headless 对话/工具链，驱动内容统一使用
      * {@link ChatService#SEND_USER_MESSAGE_MARKER}，与前端 WS 触发的 streamChildReply/continueMainChat
-     * 约定一致：槽位消息原文在发送 SEND_USER_MESSAGE 事件前已由
+     * 约定一致：列表消息原文在发送 SEND_USER_MESSAGE 事件前已由
      * AgentContextManager.sendUserMessage/sendParentMessage 以 userInput=false 落库并进入会话上下文历史，
-     * 以 marker 驱动 ChatService 走「不保存用户消息、不加入历史、不要求 conversationId」分支，
+     * 以 marker 驱动 ChatService 走「不保存用户消息、不加入历史」分支，
      * 直接按会话既有上下文触发模型执行，避免重复持久化与污染模型输入（影响回滚/记忆/评估结果）。
      * 目标为执行主会话时沿用执行会话 thinking，其余子链路目标 thinking 由会话自身配置决定（传 null）；
-     * 执行期间新产生的 SendUserMessage 继续进入槽位，循环直至无待处理项。
+     * 执行期间新产生的 SendUserMessage 继续追加进入列表，逐条 poll 至无待处理项。</p>
+     *
+     * <p>每条待处理消息驱动前，按其携带的事件原始 conversationId 检查目标会话是否已存在缓存条目：
+     * 存在则先 {@link ChatDataCacheManager#removeCache} 移除（该缓存通常是同对话先前驱动/前端流程遗留、
+     * 已以 STOP 结束或仍存活），避免驱动重入时 startCache 抛 DUPLICATE_KEY 或对已结束缓存追加；
+     * 随后以 {@link AgentMessageProxy#sendUserMessage} 透传该 conversationId 驱动（替代每次新生成
+     * conversationId 的 sendUserMessageToSession），使驱动请求归入与已落库消息一致的对话；
+     * conversationId 为 null/空时透传 null，由 processChat 自动生成时间戳 conversationId 兜底。
      * 子链路执行失败仅记录日志、不中断整体评估。</p>
      *
      * @param executionSessionId 执行主会话 ID
@@ -192,8 +203,8 @@ public class AsyncEvaluationExecutor {
         }
         int driven = 0;
         while (driven < MAX_DRIVEN_MESSAGES_PER_STEP) {
-            // getAndClearPendingSendUserMessage 取出即清：空槽、达上限退出与异常路径均不残留槽位值
-            SendUserMessage pending = executionContext.getAndClearPendingSendUserMessage();
+            // pollNextPendingSendUserMessage 取出即移除：空列表、达上限退出与异常路径均不残留列表项
+            SendUserMessage pending = executionContext.pollNextPendingSendUserMessage();
             if (pending == null) {
                 return;
             }
@@ -202,14 +213,39 @@ public class AsyncEvaluationExecutor {
             try {
                 Boolean thinking = String.valueOf(executionSessionId).equals(targetSessionId)
                         ? executionThinking : null;
-                agentMessageProxy.sendUserMessageToSession(
-                        targetSessionId, ChatService.SEND_USER_MESSAGE_MARKER, null, thinking);
-                log.debug("评估后台驱动待处理消息完成, targetSessionId={}", targetSessionId);
+                String conversationId = pending.getConversationId();
+                removeExistingDrivenCache(targetSessionId, conversationId);
+                agentMessageProxy.sendUserMessage(
+                        targetSessionId, ChatService.SEND_USER_MESSAGE_MARKER, null, thinking, conversationId);
+                log.debug("评估后台驱动待处理消息完成, targetSessionId={}, conversationId={}",
+                        targetSessionId, conversationId);
             } catch (Exception e) {
                 // 子会话（含嵌套任一层）驱动失败：回填日志并继续，父链路不中断
                 log.error("评估后台驱动待处理消息失败, targetSessionId={}, 不中断整体评估", targetSessionId, e);
             }
         }
         log.warn("评估后台单条基准消息驱动子链路消息数达到上限 {}, 停止本次驱动", MAX_DRIVEN_MESSAGES_PER_STEP);
+    }
+
+    /**
+     * 驱动前移除目标会话在指定 conversationId 下已存在的缓存条目。
+     *
+     * <p>仅当 conversationId 非空且 {@link ChatDataCacheManager#getCacheId} 命中时执行
+     * {@link ChatDataCacheManager#removeCache}；无缓存条目时不做任何操作，避免驱动重入时
+     * startCache 抛 DUPLICATE_KEY 或对已结束缓存追加（缓存键结构/收尾语义不变）。</p>
+     *
+     * @param targetSessionId 驱动目标会话 ID
+     * @param conversationId  待驱动消息携带的事件原始 conversationId（可为 null/空）
+     */
+    private void removeExistingDrivenCache(String targetSessionId, String conversationId) {
+        if (conversationId == null || conversationId.isEmpty()) {
+            return;
+        }
+        String cacheId = chatDataCacheManager.getCacheId(targetSessionId, conversationId);
+        if (cacheId != null) {
+            log.debug("评估后台驱动前移除既有缓存, sessionId={}, conversationId={}, cacheId={}",
+                    targetSessionId, conversationId, cacheId);
+            chatDataCacheManager.removeCache(cacheId);
+        }
     }
 }

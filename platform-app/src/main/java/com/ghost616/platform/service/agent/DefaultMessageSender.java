@@ -23,8 +23,9 @@ import java.util.concurrent.CompletableFuture;
  * （提交异步任务前通过 {@link ThreadVariableHandler#wrap()} 捕获当前线程用户/评估执行上下文快照，
  * 异步线程 {@link ThreadVariableWrapper#apply()} 恢复、finally 清理，防止线程复用导致串号）。
  * 评估拦截仅针对 {@link SendUserMessage}（headless 无 WS 前端）：评估后台执行时不推送，
- * 将 {@link SendUserMessage} 写入当前线程 {@link EvaluationExecutionContext} 槽位，
- * 供 {@code AsyncEvaluationExecutor} 消息驱动循环消费；其余所有情况（非评估、或评估中的
+ * 将 {@link SendUserMessage} 追加到当前线程 {@link EvaluationExecutionContext} 待处理列表
+ * （追加语义，同一驱动窗口内多条并发/连续产生的消息均保留不丢），
+ * 供 {@code AsyncEvaluationExecutor} 消息驱动循环按产生顺序逐条消费；其余所有情况（非评估、或评估中的
  * 非 SendUserMessage 消息）一律走下方统一异步分发通道，与普通路径行为一致——未来
  * MessageSender/dispatch 新增消息类型时普通与评估两条路径自动保持一致，无需再同步评估分支。</p>
  */
@@ -42,14 +43,14 @@ public class DefaultMessageSender implements MessageSender {
             return;
         }
         // 评估拦截仅针对 SendUserMessage：评估后台执行 headless 无 WS 前端，其语义为「用户消息已
-        // 落库、需后端驱动对应会话继续执行」，故不推送、同步写入评估执行上下文槽位供
+        // 落库、需后端驱动对应会话继续执行」，故不推送、追加写入评估执行上下文待处理列表供
         // AsyncEvaluationExecutor 消息驱动循环消费。标记判断与写入必须在发送线程同步完成（send
         // 可能由工具异步线程等跨线程点触发），避免异步分发线程读不到评估执行标记导致事件丢失。
         // 其余所有情况（非评估、或评估中的非 SendUserMessage 消息）一律走下方统一异步分发通道，
         // 与普通路径行为一致（dispatch 对未支持类型仅 log.debug），未来新增消息类型无需同步评估分支。
         EvaluationExecutionContext evalContext = EvaluationExecutionContext.get();
         if (evalContext != null && message instanceof SendUserMessage sendUserMessage) {
-            evalContext.setPendingSendUserMessage(sendUserMessage);
+            evalContext.addPendingSendUserMessage(sendUserMessage);
             return;
         }
         ThreadVariableWrapper wrapper = threadVariableHandler.wrap();

@@ -305,6 +305,62 @@ class AgentMessageProxyTest {
     }
 
     @Test
+    void sendUserMessage_带conversationId时构建ChatRequest透传conversationId() {
+        ServerSentEvent<ChatChunk> event = ServerSentEvent.<ChatChunk>builder()
+                .data(ChatChunk.builder().delta("Reply").hasToolCalls(false).build())
+                .build();
+        when(chatService.chat(any())).thenReturn(Flux.just(event));
+
+        proxy.sendUserMessage(sessionId, "Hi", modelId, true, "conv-abc-123");
+
+        ArgumentCaptor<ChatRequest> captor = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(chatService).chat(captor.capture());
+        ChatRequest request = captor.getValue();
+        assertEquals(sessionId, request.getSessionId());
+        assertEquals("Hi", request.getContent());
+        assertEquals(modelId, request.getModelId());
+        assertEquals(Boolean.TRUE, request.getThinking());
+        assertEquals("conv-abc-123", request.getConversationId(), "sendUserMessage 应透传调用方 conversationId");
+        assertNull(request.getImages());
+    }
+
+    @Test
+    void sendUserMessage_带conversationId与images时构建ChatRequest透传两者() {
+        List<ImageContent> images = List.of(
+                ImageContent.builder().imgId("img-3").imgText("data:image/png;base64,CCC").build());
+        ServerSentEvent<ChatChunk> event = ServerSentEvent.<ChatChunk>builder()
+                .data(ChatChunk.builder().delta("ok").hasToolCalls(false).build())
+                .build();
+        when(chatService.chat(any())).thenReturn(Flux.just(event));
+
+        proxy.sendUserMessage(sessionId, "看图", modelId, null, "conv-abc-123", images);
+
+        ArgumentCaptor<ChatRequest> captor = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(chatService).chat(captor.capture());
+        ChatRequest request = captor.getValue();
+        assertEquals("conv-abc-123", request.getConversationId());
+        assertEquals(images, request.getImages());
+    }
+
+    @Test
+    void sendUserMessage_conversationId为null时自动生成时间戳conversationId() {
+        ServerSentEvent<ChatChunk> event = ServerSentEvent.<ChatChunk>builder()
+                .data(ChatChunk.builder().delta("Reply").hasToolCalls(false).build())
+                .build();
+        when(chatService.chat(any())).thenReturn(Flux.just(event));
+
+        proxy.sendUserMessage(sessionId, "Hi", modelId, null, (String) null);
+
+        ArgumentCaptor<ChatRequest> captor = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(chatService).chat(captor.capture());
+        ChatRequest request = captor.getValue();
+        assertNotNull(request.getConversationId());
+        assertTrue(request.getConversationId().matches("\\d+"), "conversationId 为 null 时应由 processChat 自动生成时间戳兜底");
+        assertEquals(sessionId, request.getSessionId());
+        assertNull(request.getImages());
+    }
+
+    @Test
     void sendUserMessageToSession_每次调用生成的conversationId为时间戳() {
         ServerSentEvent<ChatChunk> event = ServerSentEvent.<ChatChunk>builder()
                 .data(ChatChunk.builder().delta("Reply").hasToolCalls(false).build())

@@ -34,7 +34,7 @@ public class AgentMessageProxy {
     }
 
     public Message sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking) {
-        return sendUserMessage(childSessionId, content, modelId, thinking, null);
+        return sendUserMessage(childSessionId, content, modelId, thinking, null, null);
     }
 
     /**
@@ -49,12 +49,52 @@ public class AgentMessageProxy {
      */
     public Message sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking,
                                    List<ImageContent> images) {
+        return sendUserMessage(childSessionId, content, modelId, thinking, null, images);
+    }
+
+    /**
+     * 向子会话发送用户消息（支持 conversationId 透传）。
+     *
+     * <p>conversationId 非 null/非空时透传到 ChatRequest，使该驱动请求归入对应对话（如评估后台消息驱动
+     * 透传事件原始 conversationId，保持与已落库消息的对话归组一致）；为 null 时与既有 sendUserMessage 行为
+     * 一致，由 processChat 自动生成时间戳 conversationId 兜底。</p>
+     *
+     * @param childSessionId 子会话 ID
+     * @param content        用户消息内容
+     * @param modelId        模型 ID（可为 null）
+     * @param thinking       是否启用思考模式（可为 null）
+     * @param conversationId 对话 ID（可为 null，非空则驱动请求归入该对话）
+     * @return 最终 assistant 回复消息
+     */
+    public Message sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking,
+                                   String conversationId) {
+        return sendUserMessage(childSessionId, content, modelId, thinking, conversationId, null);
+    }
+
+    /**
+     * 向子会话发送用户消息（支持 conversationId 透传与图片对象数组）。
+     *
+     * <p>conversationId 非 null/非空时透传到 ChatRequest，使该驱动请求归入对应对话（如评估后台消息驱动
+     * 透传事件原始 conversationId，保持与已落库消息的对话归组一致）；为 null 时与既有 sendUserMessage 行为
+     * 一致，由 processChat 自动生成时间戳 conversationId 兜底。</p>
+     *
+     * @param childSessionId 子会话 ID
+     * @param content        用户消息内容
+     * @param modelId        模型 ID（可为 null）
+     * @param thinking       是否启用思考模式（可为 null）
+     * @param conversationId 对话 ID（可为 null，非空则驱动请求归入该对话）
+     * @param images         图片列表（可为 null/空，imgId 仅供前端关联，不传给模型）
+     * @return 最终 assistant 回复消息
+     */
+    public Message sendUserMessage(String childSessionId, String content, String modelId, Boolean thinking,
+                                   String conversationId, List<ImageContent> images) {
         ChatRequest request = ChatRequest.builder()
                 .sessionId(childSessionId)
                 .content(content)
                 .modelId(modelId)
                 .thinking(thinking)
                 .images(images)
+                .conversationId(conversationId)
                 .build();
         return processChat(request);
     }
