@@ -1,14 +1,13 @@
 package com.ghost616.platform.service.evaluation;
 
 import com.ghost616.agentbase.core.ThreadVariableWrapper;
-import com.ghost616.agentbase.dto.model.Message;
+import com.ghost616.agentbase.sendmessage.SendUserMessage;
 import com.ghost616.agentbase.service.agent.AgentMessageProxy;
-import com.ghost616.agentbase.service.agent.ChatDataCacheManager;
 import com.ghost616.agentbase.service.agent.ChatService;
 import com.ghost616.agentbase.service.agent.MessageDataProvider;
-import com.ghost616.agentbase.service.agent.ToolExecutionService;
 import com.ghost616.platform.dto.evaluation.EvaluationExecutionStatusDTO;
 import com.ghost616.platform.entity.Session;
+import com.ghost616.platform.session.EvaluationExecutionContext;
 import com.ghost616.platform.session.UserContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,15 +17,26 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 评估异步执行器（@Async 入口）。
+ *
+ * <p>负责 headless 执行评估：逐条重放基准用户消息，期间完整执行主会话 + 子会话全链路
+ * （含多级嵌套）。执行入口创建并写入 {@link EvaluationExecutionContext}（评估执行标记），
+ * 经 {@link com.ghost616.platform.session.ContextThreadVariableHandler} 传播到工具异步线程、
+ * 子会话后台驱动线程与消息分发线程；每条基准用户消息执行后循环消费上下文槽位中的
+ * {@link SendUserMessage}（覆盖子→父 sendParentMessage 回传续接与消息驱动型子会话），
+ * 主/子全链执行完成才置 COMPLETED，再生成评估结果。</p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AsyncEvaluationExecutor {
 
-    private final ChatService chatService;
-    private final ToolExecutionService toolExecutionService;
+    /** 单条基准用户消息触发驱动（SendUserMessage 槽位消费）的最大消息数，防止异常会话陷入无限消息循环 */
+    private static final int MAX_DRIVEN_MESSAGES_PER_STEP = 100;
+
+    private final AgentMessageProxy agentMessageProxy;
     private final EvaluationResultGenerateService evaluationResultGenerateService;
-    private final ChatDataCacheManager chatDataCacheManager;
 
     /**
      * 异步生成评估结果。任务提交方（{@link EvaluationExecutionService}）通过
@@ -72,9 +82,9 @@ public class AsyncEvaluationExecutor {
     }
 
     /**
-     * 异步执行评估：逐条发送基准用户消息并生成评估结果。任务提交方通过
-     * {@link ThreadVariableWrapper} 传播当前登录用户，此处先恢复用户上下文，
-     * 执行结束后在 finally 中清理。
+     * 异步执行评估：逐条发送基准用户消息（含完整主/子会话链路）并生成评估结果。
+     * 任务提交方通过 {@link ThreadVariableWrapper} 传播当前登录用户，此处先恢复用户上下文；
+     * 入口创建评估执行上下文（执行标记），结束/异常 finally 中清理评估标记与上下文。
      *
      * @param evaluationId          评估 ID
      * @param executionSession      执行会话
@@ -90,10 +100,10 @@ public class AsyncEvaluationExecutor {
         if (threadVariableWrapper != null) {
             threadVariableWrapper.apply();
         }
+        EvaluationExecutionContext executionContext = EvaluationExecutionContext.create();
+        EvaluationExecutionContext.set(executionContext);
         try {
             String statusKey = String.valueOf(evaluationId);
-            AgentMessageProxy proxy = new AgentMessageProxy(chatService, toolExecutionService);
-            proxy.setChatDataCacheManager(chatDataCacheManager);
             Long executionSessionId = executionSession.getId();
 
             try {
@@ -111,13 +121,18 @@ public class AsyncEvaluationExecutor {
                             .build());
 
                     try {
-                        Message response = proxy.sendUserMessageToSession(
+                        // 主会话：headless 执行本条基准用户消息（内部含工具链与阻塞式子会话回调）
+                        agentMessageProxy.sendUserMessageToSession(
                                 String.valueOf(executionSessionId),
                                 content,
                                 null,
                                 executionSession.getThinking());
+                        // 消费评估执行上下文槽位中的待处理 SendUserMessage
+                        // （WEBSOCKET 型子会话打开/子→父 sendParentMessage 回传续接/消息驱动型子会话）
+                        drainPendingSendUserMessages(executionSessionId, executionSession.getThinking());
                         log.debug("评估执行消息处理完成, sessionId={}, step={}/{}", executionSessionId, i + 1, total);
                     } catch (Exception e) {
+                        // 顶层基准用户消息自身处理失败：保持既有 FAILED 语义
                         log.error("评估执行用户消息处理失败, sessionId={}, step={}/{}", executionSessionId, i + 1, total, e);
                         statusMap.put(statusKey, EvaluationExecutionStatusDTO.builder()
                                 .evaluationId(evaluationId)
@@ -130,8 +145,7 @@ public class AsyncEvaluationExecutor {
                     }
                 }
 
-                evaluationResultGenerateService.generate(evaluationId, executionSessionId);
-
+                // 主/子全链执行完成才置 COMPLETED，随后生成评估结果
                 statusMap.put(statusKey, EvaluationExecutionStatusDTO.builder()
                         .evaluationId(evaluationId)
                         .executionSessionId(executionSessionId)
@@ -139,6 +153,7 @@ public class AsyncEvaluationExecutor {
                         .currentStep(total)
                         .totalSteps(total)
                         .build());
+                evaluationResultGenerateService.generate(evaluationId, executionSessionId);
 
             } catch (Exception e) {
                 log.error("评估执行异常, evaluationId={}", evaluationId, e);
@@ -149,7 +164,52 @@ public class AsyncEvaluationExecutor {
                         .build());
             }
         } finally {
+            EvaluationExecutionContext.clear();
             UserContext.clear();
         }
+    }
+
+    /**
+     * 循环消费评估执行上下文槽位中的待处理 {@link SendUserMessage}，直至槽位为空。
+     *
+     * <p>每条消息按其目标 sessionId（子会话或父会话）执行 headless 对话/工具链，驱动内容统一使用
+     * {@link ChatService#SEND_USER_MESSAGE_MARKER}，与前端 WS 触发的 streamChildReply/continueMainChat
+     * 约定一致：槽位消息原文在发送 SEND_USER_MESSAGE 事件前已由
+     * AgentContextManager.sendUserMessage/sendParentMessage 以 userInput=false 落库并进入会话上下文历史，
+     * 以 marker 驱动 ChatService 走「不保存用户消息、不加入历史、不要求 conversationId」分支，
+     * 直接按会话既有上下文触发模型执行，避免重复持久化与污染模型输入（影响回滚/记忆/评估结果）。
+     * 目标为执行主会话时沿用执行会话 thinking，其余子链路目标 thinking 由会话自身配置决定（传 null）；
+     * 执行期间新产生的 SendUserMessage 继续进入槽位，循环直至无待处理项。
+     * 子链路执行失败仅记录日志、不中断整体评估。</p>
+     *
+     * @param executionSessionId 执行主会话 ID
+     * @param executionThinking  执行会话 thinking（透传执行会话配置）
+     */
+    private void drainPendingSendUserMessages(Long executionSessionId, Boolean executionThinking) {
+        EvaluationExecutionContext executionContext = EvaluationExecutionContext.get();
+        if (executionContext == null) {
+            return;
+        }
+        int driven = 0;
+        while (driven < MAX_DRIVEN_MESSAGES_PER_STEP) {
+            // getAndClearPendingSendUserMessage 取出即清：空槽、达上限退出与异常路径均不残留槽位值
+            SendUserMessage pending = executionContext.getAndClearPendingSendUserMessage();
+            if (pending == null) {
+                return;
+            }
+            driven++;
+            String targetSessionId = pending.getSessionId();
+            try {
+                Boolean thinking = String.valueOf(executionSessionId).equals(targetSessionId)
+                        ? executionThinking : null;
+                agentMessageProxy.sendUserMessageToSession(
+                        targetSessionId, ChatService.SEND_USER_MESSAGE_MARKER, null, thinking);
+                log.debug("评估后台驱动待处理消息完成, targetSessionId={}", targetSessionId);
+            } catch (Exception e) {
+                // 子会话（含嵌套任一层）驱动失败：回填日志并继续，父链路不中断
+                log.error("评估后台驱动待处理消息失败, targetSessionId={}, 不中断整体评估", targetSessionId, e);
+            }
+        }
+        log.warn("评估后台单条基准消息驱动子链路消息数达到上限 {}, 停止本次驱动", MAX_DRIVEN_MESSAGES_PER_STEP);
     }
 }

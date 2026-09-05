@@ -275,6 +275,9 @@ public class DefaultContextDataProvider implements ContextDataProvider {
         session.setDescription(description);
         session.setParentSessionId(pid);
         session.setIsChild(true);
+        // 评估执行标记继承：评估执行会话链（isEvaluation=true）下创建的子会话及嵌套子会话
+        // 同样为 true；普通会话下继承 null/false，不影响其它逻辑
+        session.setIsEvaluation(parentSession.getIsEvaluation());
         session.setModelId(mid);
         sessionMapper.insert(session);
 

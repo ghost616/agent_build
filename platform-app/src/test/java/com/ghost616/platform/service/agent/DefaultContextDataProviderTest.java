@@ -137,6 +137,52 @@ class DefaultContextDataProviderTest {
     }
 
     @Test
+    void createChildSession_继承评估父会话isEvaluation() {
+        // 评估执行会话（isEvaluation=true）下创建子会话：isEvaluation 继承为 true
+        Session parent = new Session();
+        parent.setIsEvaluation(Boolean.TRUE);
+        when(sessionMapper.selectById(1L)).thenReturn(parent);
+        doAnswer(invocation -> {
+            Session s = invocation.getArgument(0);
+            s.setId(999L);
+            return null;
+        }).when(sessionMapper).insert(any(Session.class));
+
+        provider.createChildSession("1", "eval-child", null, null, null, null, null);
+
+        verify(sessionMapper).insert(sessionCaptor.capture());
+        assertEquals(Boolean.TRUE, sessionCaptor.getValue().getIsEvaluation(),
+                "评估父会话创建的子会话应继承 isEvaluation=true");
+    }
+
+    @Test
+    void createChildSession_普通父会话isEvaluation保持null或false() {
+        // 普通会话（isEvaluation 为 null）下创建子会话：isEvaluation 保持不变为 null
+        Session parent = new Session();
+        when(sessionMapper.selectById(1L)).thenReturn(parent);
+        doAnswer(invocation -> {
+            Session s = invocation.getArgument(0);
+            s.setId(999L);
+            return null;
+        }).when(sessionMapper).insert(any(Session.class));
+
+        provider.createChildSession("1", "normal-child", null, null, null, null, null);
+
+        verify(sessionMapper).insert(sessionCaptor.capture());
+        assertNull(sessionCaptor.getValue().getIsEvaluation());
+
+        // 普通父会话 isEvaluation=false 时同样继承 false
+        parent.setIsEvaluation(Boolean.FALSE);
+        when(sessionMapper.selectById(2L)).thenReturn(parent);
+        provider.createChildSession("2", "normal-child-2", null, null, null, null, null);
+        verify(sessionMapper, times(2)).insert(sessionCaptor.capture());
+        List<Session> vals = sessionCaptor.getAllValues();
+        // 注意：同一 ArgumentCaptor 第二次 verify(times(2)) 会重复捕获历史调用，
+        // getAllValues()=[child1, child1, child2]，最后一次插入即 child2
+        assertEquals(Boolean.FALSE, vals.get(vals.size() - 1).getIsEvaluation());
+    }
+
+    @Test
     void createChildSession_parentSession不存在_抛异常() {
         when(sessionMapper.selectById(1L)).thenReturn(null);
 

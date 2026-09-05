@@ -1,6 +1,7 @@
 package com.ghost616.platform.config;
 
 import com.ghost616.agentbase.service.agent.AgentContextManager;
+import com.ghost616.agentbase.service.agent.AgentMessageProxy;
 import com.ghost616.agentbase.service.agent.ChatDataCacheManager;
 import com.ghost616.agentbase.service.agent.ChatDataProvider;
 import com.ghost616.agentbase.service.agent.ChatService;
@@ -31,7 +32,7 @@ import com.ghost616.platform.service.agent.DefaultChatDataCacheProvider;
 import com.ghost616.platform.service.agent.DefaultChatDataProvider;
 import com.ghost616.platform.service.agent.DefaultToolExecutionProvider;
 import com.ghost616.platform.service.agent.SubSessionWebSocketModeResolver;
-import com.ghost616.platform.session.UserContextThreadVariableHandler;
+import com.ghost616.platform.session.ContextThreadVariableHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -125,11 +126,11 @@ public class AgentContextConfiguration {
                             ModelInvokerFactory modelInvokerFactory,
                             ChatDataProvider chatDataProvider,
                             ToolExecutionProvider toolExecutionProvider,
-                            UserContextThreadVariableHandler userContextThreadVariableHandler,
+                            ContextThreadVariableHandler contextThreadVariableHandler,
                             MessageSender messageSender) {
         AgentAssembler assembler = new AgentAssembler(contextDataProvider, messageDataProvider, toolDataProvider,
                 systemToolProvider, modelInvokerFactory, chatDataProvider, messageSender, toolExecutionProvider);
-        assembler.setThreadVariableHandler(userContextThreadVariableHandler);
+        assembler.setThreadVariableHandler(contextThreadVariableHandler);
         return assembler;
     }
 
@@ -163,6 +164,19 @@ public class AgentContextConfiguration {
         agentAssembler.setAgentLog(databaseAgentLog);
         agentAssembler.refreshHooks();
         return chatService;
+    }
+
+    /**
+     * 消息代理单例 Bean：评估后台执行（{@code AsyncEvaluationExecutor.executeAsync}、
+     * {@code DefaultSubSessionCallback} 评估子会话驱动）复用同一实例 headless 执行
+     * 会话/子会话的完整对话工具链（AgentMessageProxy 属 agent-base 能力，仅平台侧 Bean 化复用）。
+     */
+    @Bean
+    public AgentMessageProxy agentMessageProxy(ChatService chatService, ToolExecutionService toolExecutionService,
+                                               ChatDataCacheManager chatDataCacheManager) {
+        AgentMessageProxy proxy = new AgentMessageProxy(chatService, toolExecutionService);
+        proxy.setChatDataCacheManager(chatDataCacheManager);
+        return proxy;
     }
 
     @Bean

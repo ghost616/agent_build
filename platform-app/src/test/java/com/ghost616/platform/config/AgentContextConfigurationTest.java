@@ -1,6 +1,8 @@
 package com.ghost616.platform.config;
 
+import com.ghost616.agentbase.core.ThreadVariableHandler;
 import com.ghost616.agentbase.service.agent.ChatDataCacheManager;
+import com.ghost616.agentbase.service.agent.AgentMessageProxy;
 import com.ghost616.agentbase.service.agent.ChatDataProvider;
 import com.ghost616.agentbase.service.agent.ChatService;
 import com.ghost616.agentbase.service.agent.ContextDataProvider;
@@ -27,7 +29,7 @@ import com.ghost616.platform.service.agent.DatabaseAgentLog;
 import com.ghost616.platform.service.agent.DefaultChatDataCacheProvider;
 import com.ghost616.platform.service.agent.DefaultChatDataProvider;
 import com.ghost616.platform.service.agent.SubSessionWebSocketModeResolver;
-import com.ghost616.platform.session.UserContextThreadVariableHandler;
+import com.ghost616.platform.session.ContextThreadVariableHandler;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +38,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationContext;
 
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -148,7 +151,7 @@ class AgentContextConfigurationTest {
         ChatDataProvider chatDataProvider = mock(ChatDataProvider.class);
 
         AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider,
-                toolExecutionProvider, new UserContextThreadVariableHandler(), mock(MessageSender.class));
+                toolExecutionProvider, new ContextThreadVariableHandler(), mock(MessageSender.class));
 
         assertNotNull(agentAssembler);
     }
@@ -160,7 +163,7 @@ class AgentContextConfigurationTest {
         ChatDataProvider chatDataProvider = mock(ChatDataProvider.class);
 
         AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider,
-                toolExecutionProvider, new UserContextThreadVariableHandler(), mock(MessageSender.class));
+                toolExecutionProvider, new ContextThreadVariableHandler(), mock(MessageSender.class));
         ChatService chatService = config.chatService(agentAssembler, databaseAgentLog);
 
         assertNotNull(chatService);
@@ -200,7 +203,7 @@ class AgentContextConfigurationTest {
         ChatDataProvider chatDataProvider = mock(ChatDataProvider.class);
 
         AgentAssembler agentAssembler = config.agentAssembler(systemToolProvider, modelInvokerFactory, chatDataProvider,
-                toolExecutionProvider, new UserContextThreadVariableHandler(), mock(MessageSender.class));
+                toolExecutionProvider, new ContextThreadVariableHandler(), mock(MessageSender.class));
         ToolExecutionService toolExecutionService = config.toolExecutionService(agentAssembler);
 
         assertNotNull(toolExecutionService);
@@ -257,5 +260,32 @@ class AgentContextConfigurationTest {
         Map<String, SystemTool> tools = provider.discoverSystemTools();
 
         assertTrue(tools.isEmpty());
+    }
+
+    @Test
+    void agentMessageProxy_正确创建独立单例Bean() {
+        AgentMessageProxy proxy = config.agentMessageProxy(
+                mock(ChatService.class), mock(ToolExecutionService.class), mock(ChatDataCacheManager.class));
+
+        assertNotNull(proxy);
+        assertSame(AgentMessageProxy.class, proxy.getClass());
+    }
+
+    @Test
+    void subSessionEvaluationExecutor_独立配置创建评估子会话驱动线程池() {
+        // 该 @Bean 位于独立 SubSessionEvaluationConfig，避免参与 AgentContextConfiguration 构造链造成循环依赖
+        ExecutorService executor = new SubSessionEvaluationConfig().subSessionEvaluationExecutor();
+
+        assertNotNull(executor);
+        assertFalse(executor.isShutdown());
+        executor.shutdown();
+    }
+
+    @Test
+    void contextThreadVariableHandler_实现ThreadVariableHandler并统一传播两类上下文() {
+        ContextThreadVariableHandler handler = new ContextThreadVariableHandler();
+
+        assertInstanceOf(ThreadVariableHandler.class, handler);
+        assertNotNull(handler.wrap());
     }
 }

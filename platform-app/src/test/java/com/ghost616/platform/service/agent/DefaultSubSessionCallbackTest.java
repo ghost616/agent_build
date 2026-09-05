@@ -1,17 +1,23 @@
 package com.ghost616.platform.service.agent;
 
+import com.ghost616.agentbase.core.ThreadVariableHandler;
 import com.ghost616.agentbase.dto.model.Message;
 import com.ghost616.agentbase.enums.SubSessionOpenMode;
 import com.ghost616.agentbase.service.agent.AgentExecutionContext;
+import com.ghost616.agentbase.service.agent.AgentMessageProxy;
 import com.ghost616.platform.entity.AgentConfig;
 import com.ghost616.platform.entity.Session;
 import com.ghost616.platform.repository.AgentConfigMapper;
 import com.ghost616.platform.repository.SessionMapper;
+import com.ghost616.platform.session.ContextThreadVariableHandler;
+import com.ghost616.platform.session.EvaluationExecutionContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -19,6 +25,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,13 +40,34 @@ class DefaultSubSessionCallbackTest {
     @Mock
     private SubSessionRunningCache subSessionRunningCache;
 
+    @Mock
+    private AgentMessageProxy agentMessageProxy;
+
+    @Mock
+    private ObjectProvider<AgentMessageProxy> agentMessageProxyProvider;
+
+    private final ThreadVariableHandler threadVariableHandler = new ContextThreadVariableHandler();
+
     private DefaultSubSessionCallback callback;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
+    private final ExecutorService subSessionDriverExecutor = Executors.newCachedThreadPool(r -> {
+        Thread thread = new Thread(r, "test-sub-session-driver");
+        thread.setDaemon(true);
+        return thread;
+    });
+
     @BeforeEach
     void setUp() {
-        callback = new DefaultSubSessionCallback(sessionMapper, agentConfigMapper, subSessionRunningCache);
+        lenient().when(agentMessageProxyProvider.getIfAvailable()).thenReturn(agentMessageProxy);
+        callback = new DefaultSubSessionCallback(sessionMapper, agentConfigMapper, subSessionRunningCache,
+                agentMessageProxyProvider, threadVariableHandler, subSessionDriverExecutor);
+    }
+
+    @AfterEach
+    void tearDown() {
+        EvaluationExecutionContext.clear();
     }
 
     @Test
@@ -423,6 +451,119 @@ class DefaultSubSessionCallbackTest {
         // 未命中：记入运行缓存并正常推送
         verify(subSessionRunningCache).add(sessionId);
         verify(ctx).sendUserMessage(String.valueOf(sessionId), userMessage, "model-3", false);
+        assertNull(callback.getSubSessionData(parentSessionId));
+    }
+
+    // ========== 评估后台执行分支（TOOL_CALL：后端异步驱动并完成 future） ==========
+
+    /**
+     * 在评估执行上下文（执行标记生效）下执行 callback.execute。
+     */
+    private CompletableFuture<Message> executeInEval(AgentExecutionContext ctx, Long sessionId, String userMessage,
+                                                     Boolean thinking) {
+        return CompletableFuture.supplyAsync(() -> {
+            EvaluationExecutionContext.set(EvaluationExecutionContext.create());
+            try {
+                return callback.execute(ctx, String.valueOf(sessionId), userMessage, thinking);
+            } finally {
+                EvaluationExecutionContext.clear();
+            }
+        }, executor);
+    }
+
+    @Test
+    void execute_评估执行TOOL_CALL_后端异步驱动并完成future() throws Exception {
+        Long sessionId = 100L;
+        Long parentSessionId = 10L;
+        String userMessage = "child task";
+        Message finalMessage = Message.builder().role("assistant").content("child response").build();
+
+        Session session = mock(Session.class);
+        when(session.getParentSessionId()).thenReturn(parentSessionId);
+        when(sessionMapper.selectById(sessionId)).thenReturn(session);
+        when(agentMessageProxy.sendUserMessageToSession(
+                String.valueOf(sessionId), userMessage, null, Boolean.TRUE)).thenReturn(finalMessage);
+
+        // 评估执行：阻塞前即由后端驱动（AgentMessageProxy Bean）完成，无需前端 complete-sub-session
+        Message actual = executeInEval(null, sessionId, userMessage, Boolean.TRUE).get(5, TimeUnit.SECONDS);
+
+        assertEquals(finalMessage, actual);
+        verify(agentMessageProxy).sendUserMessageToSession(String.valueOf(sessionId), userMessage, null, Boolean.TRUE);
+        assertNull(callback.getSubSessionData(parentSessionId), "执行完成后应清理 subSessionDataMap 条目");
+    }
+
+    @Test
+    void execute_评估执行TOOL_CALL_驱动异常_回填错误占位父链路继续() throws Exception {
+        Long sessionId = 110L;
+        Long parentSessionId = 11L;
+        String userMessage = "child task";
+
+        Session session = mock(Session.class);
+        when(session.getParentSessionId()).thenReturn(parentSessionId);
+        when(sessionMapper.selectById(sessionId)).thenReturn(session);
+        when(agentMessageProxy.sendUserMessageToSession(anyString(), anyString(), any(), any()))
+                .thenThrow(new RuntimeException("model call failed"));
+
+        Message actual = executeInEval(null, sessionId, userMessage, null).get(5, TimeUnit.SECONDS);
+
+        assertNotNull(actual);
+        assertEquals("assistant", actual.getRole());
+        assertTrue(actual.getContent().contains("\"status\":\"error\""));
+        assertTrue(actual.getContent().contains("model call failed"));
+        assertNull(callback.getSubSessionData(parentSessionId));
+    }
+
+    @Test
+    void execute_评估执行TOOL_CALL_空回复_回填错误占位() throws Exception {
+        Long sessionId = 120L;
+        Long parentSessionId = 12L;
+        String userMessage = "child task";
+
+        Session session = mock(Session.class);
+        when(session.getParentSessionId()).thenReturn(parentSessionId);
+        when(sessionMapper.selectById(sessionId)).thenReturn(session);
+        when(agentMessageProxy.sendUserMessageToSession(anyString(), anyString(), any(), any())).thenReturn(null);
+
+        Message actual = executeInEval(null, sessionId, userMessage, null).get(5, TimeUnit.SECONDS);
+
+        assertNotNull(actual);
+        assertEquals("assistant", actual.getRole());
+        assertTrue(actual.getContent().contains("\"status\":\"error\""));
+        assertNull(callback.getSubSessionData(parentSessionId));
+    }
+
+    @Test
+    void execute_评估执行TOOL_CALL_嵌套子会话递归驱动不死锁() throws Exception {
+        Long child1Id = 100L;
+        Long child2Id = 101L;
+        Long parentSessionId = 10L;
+        String child1Message = "child1 task";
+        String child2Message = "child2 task";
+
+        Session session1 = mock(Session.class);
+        when(session1.getParentSessionId()).thenReturn(parentSessionId);
+        Session session2 = mock(Session.class);
+        when(session2.getParentSessionId()).thenReturn(child1Id);
+        when(sessionMapper.selectById(child1Id)).thenReturn(session1);
+        when(sessionMapper.selectById(child2Id)).thenReturn(session2);
+
+        Message nestedFinal = Message.builder().role("assistant").content("child2 response").build();
+        Message child1Final = Message.builder().role("assistant").content("child1 response").build();
+        doAnswer(inv -> {
+            String sid = inv.getArgument(0);
+            if (String.valueOf(child1Id).equals(sid)) {
+                // child1 对话/工具链内打开嵌套子会话 child2：评估上下文经驱动线程传播，递归命中评估分支
+                callback.execute(null, String.valueOf(child2Id), child2Message, null);
+                return child1Final;
+            }
+            return nestedFinal;
+        }).when(agentMessageProxy).sendUserMessageToSession(anyString(), anyString(), any(), any());
+
+        Message actual = executeInEval(null, child1Id, child1Message, null).get(8, TimeUnit.SECONDS);
+
+        assertEquals(child1Final, actual);
+        verify(agentMessageProxy).sendUserMessageToSession(String.valueOf(child1Id), child1Message, null, null);
+        verify(agentMessageProxy).sendUserMessageToSession(String.valueOf(child2Id), child2Message, null, null);
         assertNull(callback.getSubSessionData(parentSessionId));
     }
 
