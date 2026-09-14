@@ -4,21 +4,6 @@
     "a1e8c7ea-b96c-478a-9cc0-6acf1115726a",
     "aad45d5b-3c47-4097-a5cd-72ae58e7d316"
   ],
-  "agent-base": [
-    "a832ea5d-5c17-4533-b3ed-6c9d439ef856",
-    "36e0fe2a-4439-464b-af37-0631f1bf70c2",
-    "4960ad8b-1f61-41de-b4ad-ae20b961df0f",
-    "5c1170df-6617-4212-ba96-616a6eccdf94",
-    "ac47d987-feed-4f47-9765-19e25c560893"
-  ],
-  "platform-app": [
-    "15c35344-f761-4320-abbe-3b0a79977f34",
-    "e476edeb-d76d-4f94-a467-92fe27a5ed6f",
-    "6c5c19a6-1746-4734-9c54-aaf5a2f16c5b",
-    "06fd4db8-64df-4f1b-b465-58e365c809c4",
-    "48678307-f95c-429b-a762-b7f75727e5ac",
-    "c20b77f7-a1a1-44e7-8468-bfb57c031fbd"
-  ],
   "agent-engine": [
     "3e2b7927-efd3-4def-b6d2-a0dd535c1421"
   ],
@@ -26,11 +11,18 @@
     "73e67793-e3e3-45df-9501-6f6d06ea4c1d",
     "5e4036eb-36ac-4674-869a-23993761645d",
     "dc8b69a3-258d-4762-a5c4-c617f8493320",
-    "903c1c58-7772-47c1-abea-d3ac0e24bb32"
+    "903c1c58-7772-47c1-abea-d3ac0e24bb32",
+    "7c3e957b-47e7-4979-84d9-10d18290698c"
   ],
   "agent-integration": [
     "73d237e7-76ba-4787-a84f-0dfd8090f341",
     "accd0924-8da5-465b-9a84-5a66163ec6ab",
     "59bda1d4-716b-42f7-bed0-189bc0f0f86c"
+  ],
+  "agent-base": [
+    "8b365871-3b4b-443c-9e19-a1602759fba7"
+  ],
+  "platform-app": [
+    "8cb7f821-9c96-4513-981d-7b770da871df"
   ]
 }

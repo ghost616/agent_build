@@ -1,0 +1,11 @@
+{
+  "plan_id": "plan_8bf26df8-4cb1-4d70-b780-0892a1694fd6",
+  "module_name": "frontend-ui",
+  "development_plan": "【frontend-ui 模块】需求：将智能体配置弹窗中的「系统提示词」字段长度上限从 2000 调整为 8000（字符）。\n\n背景与现状：\n- 唯一限制点位于 src/pages/agents/AgentList.tsx 第 502 行：<Input.TextArea placeholder=\"请输入系统提示词\" rows={4} maxLength={2000} showCount />，需将 maxLength 由 2000 改为 8000。\n- 后端（AgentCreateRequest / AgentUpdateRequest）与数据库（agent_config.system_prompt 为 TEXT 类型）均无长度限制，本次不修改。\n\n要求：\n1. 仅修改 src/pages/agents/AgentList.tsx 中「系统提示词」输入框的 maxLength 值：2000 → 8000，保持 showCount 与超长无法继续输入的现有交互方式。\n2. 该弹窗同时用于新增智能体与编辑智能体，一处修改即覆盖两个场景。\n3. 同弹窗其他字段限制保持不变（名称 maxLength=100、描述 maxLength=500）。\n4. 不新增必填校验，系统提示词仍允许为空。\n5. 不改动后端代码、数据库结构与接口定义。\n\n验收标准：\n- 系统提示词输入框可完整输入并保存 8000 个字符，重新打开编辑弹窗可完整回显。\n- 输入第 8001 个字符时被阻止，输入框不再接受新字符。\n- 字符计数器显示为 8000 / 8000（达到上限时）。\n- 其他字段限制与空值行为保持不变。",
+  "session_id": "7c3e957b-47e7-4979-84d9-10d18290698c",
+  "modified_files": [
+    "src/pages/agents/AgentList.tsx",
+    "src/pages/agents/__tests__/AgentListSystemPrompt.test.tsx",
+    "e2e/AgentListSystemPrompt.spec.ts"
+  ]
+}

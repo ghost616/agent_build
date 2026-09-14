@@ -1,0 +1,13 @@
+[
+  {
+    "plan_id": "plan_8bf26df8-4cb1-4d70-b780-0892a1694fd6",
+    "plan": "将 AgentList.tsx 系统提示词 Input.TextArea 的 maxLength 由 2000 改为 8000，其他字段限制不变",
+    "modified_files": [
+      "src/pages/agents/AgentList.tsx",
+      "src/pages/agents/__tests__/AgentListSystemPrompt.test.tsx",
+      "e2e/AgentListSystemPrompt.spec.ts"
+    ],
+    "summary": "执行总结：本轮共修改/新增 3 个文件。1) 修改 src/pages/agents/AgentList.tsx 第 502 行，系统提示词 Input.TextArea 的 maxLength 由 2000 改为 8000，保留 showCount、rows=4 与超长阻止输入的交互；同弹窗名称 maxLength=100（仍必填）、描述 maxLength=500 未改动，未新增必填校验（系统提示词仍可为空）；该弹窗新增/编辑共用，一处修改覆盖两个场景；未涉及后端代码、数据库结构与接口定义。2) 离朱新增单测 src/pages/agents/__tests__/AgentListSystemPrompt.test.tsx。3) 离朱新增 E2E e2e/AgentListSystemPrompt.spec.ts（配套 playwright.lizhu.sysprompt.config.ts，未纳入模块定义，因既有 playwright.*.config.ts 均未纳入）。已同步 module_definition 新增 2 个测试文件条目并追加 change_history。\n测试总结：全部测试通过，通过 130 项，失败 0 项，跳过 0 项。单元测试（新增静态契约验证）14/14 通过；单元测试既有用例回归（agents 页 + types/agent + services/agent）86/86 通过 exit 0；接口测试（E2E 拦截真实请求断言 payload）5/5 通过（POST 8000 字符/7999 字符/空值、PUT 8000 字符回填/清空，payload 长度与内容一致）；编译测试 npx tsc --noEmit：本次改动文件 AgentList.tsx 0 错误，全量报错均为存量问题（40+ 测试文件缺 @types/node 导致 TS2307/TS2304，另有存量源码错误 EvaluationResultList.tsx:261、ToolList.tsx:213），与本次变更无关；E2E 新增 9/9 通过（maxlength=8000、计数 0 / 8000、达上限后键盘输入被拒绝、8001 字符截断为 8000、计数 8000 / 8000、7999 边界、留空可提交、名称 100+必填仍生效且不发请求、描述 500、编辑回显 8000 字并提交一致）；E2E 既有回归 16/16 通过（AgentList.spec.ts、AgentListVectorModel.spec.ts）。\n环境问题（不影响结论，供风后知悉）：a) 本工作区 write/edit 文件工具不可用（报 EISDIR ... link，根因 E: 卷为 exFAT 不支持硬链接），离朱改用 shell [System.IO.File]::WriteAllText 创建测试文件；本次我方的 1 行 edit 成功执行，但后续在此工作区写文件可能需改用 shell。b) 全量 npx vitest run（47 文件）600s 超时未跑完，改用 3 个相关测试路径定向回归。c) npm run build（tsc && vite build）会因存量 tsc 错误失败，建议补 @types/node 并修复上述 2 处源码类型错误，否则编译门禁形同虚设。遗留物：playwright.lizhu.sysprompt.config.ts、.lizhu_env/sysprompt/、lizhu_sysprompt_*.log 等离朱临时产物仍在仓库中，未删除，如需清理请指示。",
+    "errors": []
+  }
+]

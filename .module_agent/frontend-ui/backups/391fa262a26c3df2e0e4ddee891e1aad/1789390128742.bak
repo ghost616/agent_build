@@ -15,7 +15,13 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import type { CommonStatus } from '../../types/common';
-import type { AgentConfig, AgentFormData, SessionAuthType } from '../../types/agent';
+import type {
+  AgentConfig,
+  AgentFormData,
+  KnowledgeBaseItem,
+  SessionAuthType,
+  SubSessionOpenMode,
+} from '../../types/agent';
 import type { ModelConfig } from '../../types/model';
 import type { ToolConfig } from '../../types/tool';
 import {
@@ -28,7 +34,10 @@ import {
 import { listModels } from '../../services/model';
 import { listTools } from '../../services/tool';
 import { listSkills } from '../../services/skill';
+import { listKnowledgeBases } from '../../services/knowledge';
 import type { SkillConfig } from '../../types/skill';
+import type { KnowledgeBase } from '../../types/knowledge';
+import useTableScrollY from '../../hooks/useTableScrollY';
 
 const STATUS_LABELS: Record<CommonStatus, string> = {
   ENABLED: '启用',
@@ -56,6 +65,23 @@ const SESSION_AUTH_OPTIONS = Object.entries(SESSION_AUTH_LABELS).map(([value, la
   value,
   label,
 }));
+
+const SUB_SESSION_OPEN_MODE_LABELS: Record<SubSessionOpenMode, string> = {
+  WEBSOCKET: 'WebSocket推送',
+  TOOL_CALL: '前台工具调用',
+};
+
+const SUB_SESSION_OPEN_MODE_COLORS: Record<SubSessionOpenMode, string> = {
+  WEBSOCKET: 'cyan',
+  TOOL_CALL: 'geekblue',
+};
+
+const SUB_SESSION_OPEN_MODE_OPTIONS = Object.entries(SUB_SESSION_OPEN_MODE_LABELS).map(
+  ([value, label]) => ({
+    value,
+    label,
+  }),
+);
 
 function SessionAuthSelect({
   value = [],
@@ -135,10 +161,13 @@ function AgentList(): JSX.Element {
   const [editingAgent, setEditingAgent] = useState<AgentConfig | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm<AgentFormData>();
+  const memoryEnabled = Form.useWatch('memoryEnabled', form);
 
   const [modelList, setModelList] = useState<ModelConfig[]>([]);
+  const [vectorModelList, setVectorModelList] = useState<ModelConfig[]>([]);
   const [toolList, setToolList] = useState<ToolConfig[]>([]);
   const [skillList, setSkillList] = useState<SkillConfig[]>([]);
+  const [knowledgeBaseList, setKnowledgeBaseList] = useState<KnowledgeBase[]>([]);
   const [modelMap, setModelMap] = useState<Record<string, string>>({});
   const [toolMap, setToolMap] = useState<Record<string, string>>({});
   const [skillMap, setSkillMap] = useState<Record<string, string>>({});
@@ -160,14 +189,18 @@ function AgentList(): JSX.Element {
 
   const fetchRefData = useCallback(async () => {
     try {
-      const [models, tools, skills] = await Promise.all([
-        listModels({}),
+      const [models, vectorModels, tools, skills, knowledgeBases] = await Promise.all([
+        listModels({ modelType: 'LLM' }),
+        listModels({ modelType: 'EMBEDDINGS' }),
         listTools({}),
         listSkills({}),
+        listKnowledgeBases({}),
       ]);
       setModelList(models);
+      setVectorModelList(vectorModels);
       setToolList(tools);
       setSkillList(skills);
+      setKnowledgeBaseList(knowledgeBases);
       const modelMapData: Record<string, string> = {};
       models.forEach((m) => {
         modelMapData[m.id] = m.name;
@@ -184,7 +217,7 @@ function AgentList(): JSX.Element {
       });
       setSkillMap(skillMapData);
     } catch {
-      message.error('获取模型/工具/技能列表失败');
+      message.error('获取模型/工具/技能/知识库列表失败');
     }
   }, []);
 
@@ -220,7 +253,12 @@ function AgentList(): JSX.Element {
       modelId: editingAgent.modelId,
       tools: editingAgent.tools,
       skills: editingAgent.skills,
+      knowledgeBaseIds: editingAgent.knowledgeBases?.map((kb) => kb.id),
       recentMessageCount: editingAgent.recentMessageCount,
+      memoryEnabled: editingAgent.memoryEnabled,
+      memoryGroupCount: editingAgent.memoryGroupCount,
+      vectorModelId: editingAgent.vectorModelId,
+      subSessionOpenMode: editingAgent.subSessionOpenMode ?? 'TOOL_CALL',
     });
   }, [editingAgent, modalVisible, form]);
 
@@ -254,6 +292,9 @@ function AgentList(): JSX.Element {
       values = await form.validateFields();
     } catch {
       return;
+    }
+    if (!values.memoryEnabled) {
+      values.vectorModelId = undefined;
     }
 
     setSubmitting(true);
@@ -329,11 +370,39 @@ function AgentList(): JSX.Element {
       },
     },
     {
+      title: '绑定知识库',
+      dataIndex: 'knowledgeBases',
+      width: 200,
+      render: (value: KnowledgeBaseItem[] | undefined) => {
+        if (!value || value.length === 0) return '-';
+        return (
+          <Space size={[0, 4]} wrap>
+            {value.map((item) => (
+              <Tag key={item.id}>{item.name}</Tag>
+            ))}
+          </Space>
+        );
+      },
+    },
+    {
       title: '最近消息',
       dataIndex: 'recentMessageCount',
       width: 100,
       render: (value: number | undefined) =>
         value === undefined || value === null ? '-' : value,
+    },
+    {
+      title: '子会话打开方式',
+      dataIndex: 'subSessionOpenMode',
+      width: 140,
+      render: (value: SubSessionOpenMode | undefined) => {
+        const mode: SubSessionOpenMode = value ?? 'TOOL_CALL';
+        return (
+          <Tag color={SUB_SESSION_OPEN_MODE_COLORS[mode]}>
+            {SUB_SESSION_OPEN_MODE_LABELS[mode]}
+          </Tag>
+        );
+      },
     },
     {
       title: '状态',
@@ -406,7 +475,7 @@ function AgentList(): JSX.Element {
         dataSource={dataSource}
         loading={loading}
         pagination={false}
-        scroll={{ x: 1400 }}
+        scroll={{ x: 1600, y: useTableScrollY(216) }}
       />
 
       <Modal
@@ -444,6 +513,16 @@ function AgentList(): JSX.Element {
               }))}
             />
           </Form.Item>
+          <Form.Item
+            name="subSessionOpenMode"
+            label="子会话打开方式"
+            initialValue="TOOL_CALL"
+          >
+            <Select
+              placeholder="请选择子会话打开方式"
+              options={SUB_SESSION_OPEN_MODE_OPTIONS}
+            />
+          </Form.Item>
           <Form.Item name="tools" label="挂载工具">
             <SessionAuthSelect
               idField="toolId"
@@ -464,16 +543,66 @@ function AgentList(): JSX.Element {
               }))}
             />
           </Form.Item>
+          <Form.Item name="knowledgeBaseIds" label="绑定知识库">
+            <Select
+              mode="multiple"
+              placeholder="请选择绑定知识库"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={knowledgeBaseList.map((kb) => ({
+                value: kb.id,
+                label: kb.name,
+              }))}
+            />
+          </Form.Item>
           <Form.Item
             name="recentMessageCount"
-            label="最近消息数量"
+            label="保留对话轮数"
+            extra="保留最近 N 轮对话对 AI 可见，更早对话折叠"
             initialValue={10}
           >
             <InputNumber
-              placeholder="请输入最近消息数量"
+              placeholder="请输入保留对话轮数"
               min={1}
               max={100}
               style={{ width: '100%' }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="memoryEnabled"
+            label="记忆功能"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="memoryGroupCount"
+            label="保留消息组数量"
+            extra="保留最近 N 个消息组对 AI 可见，更早的消息组归档为记忆"
+            initialValue={30}
+            hidden={!memoryEnabled}
+          >
+            <InputNumber
+              placeholder="请输入保留消息组数量"
+              min={1}
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="vectorModelId"
+            label="向量模型"
+            hidden={!memoryEnabled}
+          >
+            <Select
+              placeholder="请选择向量模型"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={vectorModelList.map((m) => ({
+                value: m.id,
+                label: m.name,
+              }))}
             />
           </Form.Item>
         </Form>

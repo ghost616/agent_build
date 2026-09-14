@@ -1,0 +1,5 @@
+{
+  "session_id": "7c3e957b-47e7-4979-84d9-10d18290698c",
+  "content": "# 待测试功能说明\n\n## 变更内容\n智能体配置弹窗（新增/编辑共用）中「系统提示词」输入框的长度上限由 2000 调整为 8000。\n\n## 涉及代码文件\n- `src/pages/agents/AgentList.tsx`（第 501-503 行，Form.Item name=\"systemPrompt\" 下的 `Input.TextArea`，maxLength=8000，showCount，rows=4）\n\n## 需要测试的功能点\n1. 系统提示词输入框 `maxLength` 为 8000，且仍保留 `showCount`（字符计数器）。\n2. 输入框可接受并提交 8000 个字符的系统提示词（新增与编辑两个场景共用同一弹窗，一处修改即覆盖）。\n3. 输入达到 8000 字符后不再接受新字符（超长被阻止），计数器显示 `8000 / 8000`。\n4. 系统提示词仍允许为空，未新增必填校验（无 required 规则）。\n5. 同弹窗其他字段限制保持不变：名称 maxLength=100（且仍为必填）、描述 maxLength=500。\n6. 编辑场景下打开弹窗可完整回显已保存的长系统提示词（回填逻辑 `systemPrompt: editingAgent.systemPrompt`）。\n\n## 相关既有测试文件（可参考其静态验证风格）\n- `src/pages/agents/__tests__/AgentList.test.tsx`\n\n## 项目约定\n- 前端测试框架：Vitest + React Testing Library；E2E：Playwright（`e2e/` 目录）。\n- 只修改该一处上限值，不应改动后端代码、数据库结构与接口定义。\n",
+  "timestamp": "2026-09-14T12:49:02.295Z"
+}

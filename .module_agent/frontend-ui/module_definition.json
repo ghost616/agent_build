@@ -316,6 +316,14 @@
     {
       "path": "src/types/__tests__/agent.test.ts",
       "description": "Agent 类型定义静态验证测试：断言 SessionAuthType/SubSessionOpenMode 联合类型、AgentConfig/AgentFormData 的 tools/skills/knowledgeBases/knowledgeBaseIds/memoryEnabled/memoryGroupCount/subSessionOpenMode 等字段结构"
+    },
+    {
+      "path": "src/pages/agents/__tests__/AgentListSystemPrompt.test.tsx",
+      "description": "智能体配置弹窗「系统提示词」长度上限静态契约测试：读取 AgentList.tsx 源码断言 maxLength=8000 且保留 showCount/rows=4/placeholder、旧上限 2000 已无残留、systemPrompt 无 required 校验、名称 maxLength=100+必填与描述 maxLength=500 保持不变、编辑回填 systemPrompt: editingAgent.systemPrompt、新增/编辑共用唯一输入框、提交经 values 透传 createAgent/updateAgent、maxLength 为数字字面量且全仓库仅 AgentList.tsx 使用 8000（排除测试文件自身字面量）"
+    },
+    {
+      "path": "e2e/AgentListSystemPrompt.spec.ts",
+      "description": "智能体配置弹窗「系统提示词」上限 8000 的 Playwright E2E 用例：真实浏览器驱动新增/编辑弹窗，断言 TextArea maxlength=8000、计数初始 0 / 8000、输入 8000 字符提交后 POST/PUT payload 长度 8000 且内容一致、达上限后键盘输入被拒绝且计数 8000 / 8000、8001 字符被截断为 8000、7999 边界保留、留空可提交（无必填校验）、名称 maxlength=100 必填校验仍生效（不发请求）、描述 maxlength=500、编辑回显 8000 字提示词、清空提示词后可正常提交"
     }
   ]
 }

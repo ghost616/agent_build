@@ -499,7 +499,7 @@ function AgentList(): JSX.Element {
             <Input.TextArea placeholder="请输入智能体描述" rows={3} maxLength={500} showCount />
           </Form.Item>
           <Form.Item name="systemPrompt" label="系统提示词">
-            <Input.TextArea placeholder="请输入系统提示词" rows={4} maxLength={2000} showCount />
+            <Input.TextArea placeholder="请输入系统提示词" rows={4} maxLength={8000} showCount />
           </Form.Item>
           <Form.Item name="modelId" label="关联模型">
             <Select
